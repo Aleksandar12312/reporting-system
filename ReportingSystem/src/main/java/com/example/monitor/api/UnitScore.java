@@ -3,7 +3,8 @@ package com.example.monitor.api;
 import java.util.List;
 
 /**
- * One unit as the REST API returns it (GET /api/units/scores and similar).
+ * One unit as the REST API returns it (GET /api/units/scores and similar). The tier is the tier of the fault rate,
+ * but at least WATCH while a component message is ACTIVE or RECURRING (see {@link #withIssues}).
  *
  * @param faults          faults in the unit's window (unit_stats.faults_in_window)
  * @param exposureDays    length of the window in days
@@ -35,10 +36,16 @@ public record UnitScore(
         issues = issues == null ? List.of() : List.copyOf(issues);
     }
 
-    /** The same score with the given component messages. */
+    /**
+     * The same score with the given component messages. A unit with a component message that is ACTIVE or
+     * RECURRING is at least WATCH: OK and NO_BASELINE become WATCH, WATCH and CRITICAL stay. Marking the component
+     * as OK removes the message, so the tier of the fault rate applies again. Rate, ratio and scope stay as they were.
+     */
     public UnitScore withIssues(List<ComponentIssue> newIssues) {
+        boolean wrong = newIssues != null && newIssues.stream().anyMatch(i -> i.status() != IssueStatus.OK);
+        Tier newTier = wrong && (tier == Tier.OK || tier == Tier.NO_BASELINE) ? Tier.WATCH : tier;
         return new UnitScore(unitId, serialNumber, modelName, faults, exposureDays, ratePerDay, modelMedianRate,
-                ratioToModel, tier, topPart, topPartFaults, topPartShare, scope, newIssues);
+                ratioToModel, newTier, topPart, topPartFaults, topPartShare, scope, newIssues);
     }
 
     /** True for WATCH and CRITICAL. */

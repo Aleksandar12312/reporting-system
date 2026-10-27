@@ -66,4 +66,34 @@ class RankingEngineTest {
                 List.of(row(1, 3, 1.0, 1.0), row(2, 3, 3.0, 1.0), row(3, 3, 1.0, null)), List.of());
         assertThat(scores).extracting(UnitScore::unitId).containsExactly(2L, 1L, 3L);
     }
+
+    private static ComponentIssue issue(IssueComponent component, IssueStatus status) {
+        return new ComponentIssue(component, status, IssueMetric.REJECT_SHARE, 0.3, 0.08, 3.75, 100, true,
+                null, null, null, null);
+    }
+
+    @Test
+    void activeComponentMessageMakesOkAndNoBaselineUnitsWatchButNeverLowersTier() {
+        List<ComponentIssue> scannerWrong = List.of(issue(IssueComponent.SCANNER, IssueStatus.ACTIVE),
+                issue(IssueComponent.RECYCLER, IssueStatus.OK));
+        assertThat(scoreOf(row(1, 0, 0.0, 1.0)).withIssues(scannerWrong).tier()).isEqualTo(Tier.WATCH);
+        assertThat(scoreOf(row(2, 5, 1.0, null)).withIssues(scannerWrong).tier()).isEqualTo(Tier.WATCH);
+        assertThat(scoreOf(row(3, 10, 4.0, 1.0)).withIssues(scannerWrong).tier()).isEqualTo(Tier.CRITICAL);
+
+        List<ComponentIssue> recurring = List.of(issue(IssueComponent.SCANNER, IssueStatus.OK),
+                issue(IssueComponent.RECYCLER, IssueStatus.RECURRING));
+        UnitScore raised = scoreOf(row(4, 3, 1.0, 1.0)).withIssues(recurring);
+        assertThat(raised.tier()).isEqualTo(Tier.WATCH);
+        assertThat(raised.ratioToModel()).isEqualTo(1.0);
+        assertThat(raised.isFlagged()).isTrue();
+    }
+
+    @Test
+    void tierFollowsTheFaultRateWhenEveryComponentIsOk() {
+        List<ComponentIssue> allOk = List.of(issue(IssueComponent.SCANNER, IssueStatus.OK),
+                issue(IssueComponent.RECYCLER, IssueStatus.OK));
+        assertThat(scoreOf(row(1, 2, 1.0, 1.0)).withIssues(allOk).tier()).isEqualTo(Tier.OK);
+        assertThat(scoreOf(row(2, 5, 1.0, null)).withIssues(allOk).tier()).isEqualTo(Tier.NO_BASELINE);
+        assertThat(scoreOf(row(3, 5, 1.0, 1.0)).withIssues(List.of()).tier()).isEqualTo(Tier.OK);
+    }
 }

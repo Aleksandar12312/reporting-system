@@ -4,7 +4,7 @@ package com.example.monitor.api;
 public enum Tier {
     /** Rate is at least ranking.critical-ratio times the model median. */
     CRITICAL,
-    /** Rate is at least ranking.watch-ratio times the model median. */
+    /** Rate is at least ranking.watch-ratio times the model median, or a SCANNER / RECYCLER message is active. */
     WATCH,
     /** Below the watch ratio, or fewer than ranking.min-faults faults. */
     OK,
