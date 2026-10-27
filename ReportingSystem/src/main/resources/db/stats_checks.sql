@@ -39,3 +39,19 @@ FROM event e
 JOIN event_source s ON s.source = e.source
 GROUP BY s.category, e.source
 ORDER BY s.category, events DESC;
+
+-- 7. Reject share per planted profile (DIRTY_SCANNER about 0.30, every other profile about 0.08).
+--    The REST API flags a scanner at 2 x the model median, so all DIRTY_SCANNER units should be flagged.
+SELECT p.profile, COUNT(DISTINCT s.unit_id) AS units, SUM(s.notes_read) AS notes_read,
+       SUM(s.notes_rejected) AS notes_rejected,
+       ROUND(SUM(s.notes_rejected) / NULLIF(SUM(s.notes_read), 0), 3) AS reject_share
+FROM unit_scanner_daily s
+JOIN mock_unit_profile p ON p.unit_id = s.unit_id
+GROUP BY p.profile
+ORDER BY reject_share DESC;
+
+-- 8. The newest "marked OK" per unit and component
+SELECT a.unit_id, a.component, a.acked_at, a.acked_by, a.note
+FROM unit_issue_ack a
+JOIN (SELECT MAX(id) AS max_id FROM unit_issue_ack GROUP BY unit_id, component) m ON m.max_id = a.id
+ORDER BY a.acked_at DESC;

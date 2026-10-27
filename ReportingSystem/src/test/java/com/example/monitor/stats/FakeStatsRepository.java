@@ -16,10 +16,13 @@ class FakeStatsRepository extends StatsRepository {
     boolean checkEventUnchanged = true;
     boolean dailyEmpty;
     boolean faultEventsExist = true;
+    boolean scannerEmpty;
+    boolean scannerEventsExist = true;
     int removedUnits;
 
     int deleteAllCalls;
     final List<long[]> addedSlices = new ArrayList<>();
+    final List<long[]> addedScannerSlices = new ArrayList<>();
     final List<Long> savedStates = new ArrayList<>();
 
     FakeStatsRepository() {
@@ -55,6 +58,22 @@ class FakeStatsRepository extends StatsRepository {
     @Override
     public boolean faultEventsExistUpTo(long eventId) {
         return faultEventsExist;
+    }
+
+    @Override
+    public boolean scannerTableIsEmpty() {
+        return scannerEmpty;
+    }
+
+    @Override
+    public boolean scannerEventsExistUpTo(long eventId) {
+        return scannerEventsExist;
+    }
+
+    @Override
+    public int addScannerToDaily(long fromId, long toId) {
+        addedScannerSlices.add(new long[] {fromId, toId});
+        return 1;
     }
 
     @Override

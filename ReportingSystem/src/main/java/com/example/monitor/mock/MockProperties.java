@@ -21,7 +21,7 @@ public record MockProperties(
     /** Missing sections in the YAML become empty instead of causing a NullPointerException later. */
     public MockProperties {
         models = models == null ? List.of() : List.copyOf(models);
-        planted = planted == null ? new Planted(0, 0, 0, 0, 0) : planted;
+        planted = planted == null ? new Planted(0, 0, 0, 0, 0, 0) : planted;
     }
 
     /** Customer transactions and warnings/state changes per unit per day, as the simulator needs them. */
@@ -34,9 +34,10 @@ public record MockProperties(
     }
 
     /** How many units get a special behaviour. The rest of the units are NORMAL. */
-    public record Planted(int bad, int badOneComponent, int borderline, int newFewFaults, int silent) {
+    public record Planted(int bad, int badOneComponent, int borderline, int newFewFaults, int silent,
+                          int dirtyScanner) {
         public int total() {
-            return bad + badOneComponent + borderline + newFewFaults + silent;
+            return bad + badOneComponent + borderline + newFewFaults + silent + dirtyScanner;
         }
     }
 }

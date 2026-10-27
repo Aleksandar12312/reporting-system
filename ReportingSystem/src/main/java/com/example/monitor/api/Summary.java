@@ -10,6 +10,9 @@ import java.util.Map;
  * @param windowDays the look-back window of the statistics (stats.window-days)
  * @param unitCount  number of units in unit_stats
  * @param tiers      number of units per tier; every tier is present, also with 0
+ * @param issues     number of units where something is wrong (ACTIVE or RECURRING) per component; every
+ *                   component is present, also with 0
  */
-public record Summary(LocalDateTime computedAt, int windowDays, int unitCount, Map<Tier, Integer> tiers) {
+public record Summary(LocalDateTime computedAt, int windowDays, int unitCount, Map<Tier, Integer> tiers,
+                      Map<IssueComponent, Integer> issues) {
 }

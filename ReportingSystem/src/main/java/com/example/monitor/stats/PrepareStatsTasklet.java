@@ -20,6 +20,8 @@ import org.springframework.batch.repeat.RepeatStatus;
  *   <li>the state points past the newest event, or its check event is gone or different: the event table
  *       was re-created (re-seed)</li>
  *   <li>unit_fault_daily is empty although faults were already counted: the table was emptied by hand</li>
+ *   <li>unit_scanner_daily is empty although scanner events were already counted: the table is new
+ *       (first start after an upgrade) or was emptied by hand</li>
  * </ul>
  */
 public class PrepareStatsTasklet implements Tasklet {
@@ -75,6 +77,9 @@ public class PrepareStatsTasklet implements Tasklet {
         }
         if (state.lastEventId() > 0 && stats.dailyTableIsEmpty() && stats.faultEventsExistUpTo(state.lastEventId())) {
             return Optional.of("unit_fault_daily is empty although faults were already counted");
+        }
+        if (state.lastEventId() > 0 && stats.scannerTableIsEmpty() && stats.scannerEventsExistUpTo(state.lastEventId())) {
+            return Optional.of("unit_scanner_daily is empty although scanner events were already counted");
         }
         return Optional.empty();
     }

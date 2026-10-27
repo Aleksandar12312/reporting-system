@@ -32,23 +32,36 @@ public final class EventSimulator {
     /** event.placeholder: the component id of the bill recycler. */
     public static final String PLACEHOLDER = "RC";
 
-    /** The behaviour planted into a unit. The multiplier scales the model's normal fault rate. */
+    /** Share of inserted notes a normal scanner accepts; the rest is rejected (NOTE_REJECTED). */
+    public static final double NORMAL_ACCEPT_SHARE = 0.92;
+
+    /**
+     * The behaviour planted into a unit. The multiplier scales the model's normal fault rate;
+     * the accept share is how many inserted notes the scanner accepts (the rest is rejected).
+     */
     public enum Profile {
-        NORMAL(1.0),
-        BORDERLINE(2.5),
-        BAD(8.0),
-        BAD_ONE_COMPONENT(6.0),   // 80% of its faults are the same fault (source)
-        NEW_FEW_FAULTS(2.0),      // created 3 days ago, so it has only a few faults in total
-        SILENT(0.0);              // never reports anything
+        NORMAL(1.0, NORMAL_ACCEPT_SHARE),
+        BORDERLINE(2.5, NORMAL_ACCEPT_SHARE),
+        BAD(8.0, NORMAL_ACCEPT_SHARE),
+        BAD_ONE_COMPONENT(6.0, NORMAL_ACCEPT_SHARE),   // 80% of its faults are the same fault (source)
+        NEW_FEW_FAULTS(2.0, NORMAL_ACCEPT_SHARE),      // created 3 days ago, so it has only a few faults in total
+        DIRTY_SCANNER(1.0, 0.70),                      // normal faults, but rejects 30% of the notes instead of 8%
+        SILENT(0.0, NORMAL_ACCEPT_SHARE);              // never reports anything
 
         private final double faultMultiplier;
+        private final double acceptShare;
 
-        Profile(double faultMultiplier) {
+        Profile(double faultMultiplier, double acceptShare) {
             this.faultMultiplier = faultMultiplier;
+            this.acceptShare = acceptShare;
         }
 
         public double faultMultiplier() {
             return faultMultiplier;
+        }
+
+        public double acceptShare() {
+            return acceptShare;
         }
     }
 
@@ -164,7 +177,7 @@ public final class EventSimulator {
         double kind = rng.nextDouble();
         if (kind < 0.68) {                                   // a customer pays in a note
             steps.add(RecyclerEvent.READ_NOTE);
-            if (rng.nextDouble() < 0.92) {
+            if (rng.nextDouble() < unit.profile().acceptShare()) {
                 steps.add(RecyclerEvent.NOTE_STACKING);
                 steps.add(RecyclerEvent.CREDIT_NOTE);
                 // the recycler keeps most notes for change; the rest goes to the cashbox

@@ -21,6 +21,17 @@ CREATE TABLE IF NOT EXISTS unit_fault_daily (
     KEY idx_ufd_fault_unit (fault, unit_id)
 ) ENGINE = InnoDB;
 
+-- Scanner activity per unit and day (UTC day of event.event_time): notes read (READ_NOTE) and
+-- notes rejected (NOTE_REJECTED). The REST API compares the reject share with the model's median.
+CREATE TABLE IF NOT EXISTS unit_scanner_daily (
+    unit_id         BIGINT  NOT NULL,
+    event_date      DATE    NOT NULL,
+    notes_read      INT     NOT NULL,
+    notes_rejected  INT     NOT NULL,
+    PRIMARY KEY (unit_id, event_date),
+    KEY idx_usd_date (event_date)
+) ENGINE = InnoDB;
+
 -- One row per unit, also for a unit without faults. The window is the last stats.window-days days,
 -- or shorter for a younger unit; faults are counted from the first day of the window.
 CREATE TABLE IF NOT EXISTS unit_stats (

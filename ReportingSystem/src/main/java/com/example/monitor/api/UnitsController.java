@@ -4,13 +4,15 @@ import java.util.List;
 
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
- * REST access to the unit statistics. Read-only. The numbers are as fresh as the last run of the
- * statistics job (every 5 minutes); the event lists are read live.
+ * REST access to the unit statistics. The numbers are as fresh as the last run of the statistics job
+ * (every 5 minutes); the event lists are read live. The only calls that write are the "mark as OK" POSTs.
  *
  * <ul>
  *   <li>GET /api/units/scores: every unit, highest ratio first</li>
@@ -21,6 +23,9 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>GET /api/units/{unitId}/faults: faults of one unit by component and fault name</li>
  *   <li>GET /api/units/{unitId}/fault-events?limit=100: newest fault events of one unit</li>
  *   <li>GET /api/units/{unitId}/events?limit=100: newest events of one unit, of every kind</li>
+ *   <li>POST /api/units/{unitId}/issues/{component}/ack: mark SCANNER or RECYCLER of a unit as OK</li>
+ *   <li>POST /api/units/{unitId}/issues/ack: mark every component that has a problem as OK</li>
+ *   <li>GET /api/units/{unitId}/issues/history?limit=50: every "marked OK" of a unit, newest first</li>
  * </ul>
  *
  * A wrong parameter (unknown tier or fault, limit outside 1..1000, text instead of a number) gives status 400;
@@ -78,5 +83,21 @@ public class UnitsController {
     @GetMapping("/{unitId}/events")
     public List<UnitEvent> events(@PathVariable long unitId, @RequestParam(defaultValue = "100") int limit) {
         return service.getUnitEvents(unitId, limit);
+    }
+
+    @PostMapping("/{unitId}/issues/{component}/ack")
+    public UnitScore markOk(@PathVariable long unitId, @PathVariable IssueComponent component,
+                            @RequestBody(required = false) AckRequest body) {
+        return service.markOk(unitId, component, body);
+    }
+
+    @PostMapping("/{unitId}/issues/ack")
+    public UnitScore markAllOk(@PathVariable long unitId, @RequestBody(required = false) AckRequest body) {
+        return service.markAllOk(unitId, body);
+    }
+
+    @GetMapping("/{unitId}/issues/history")
+    public List<IssueAck> ackHistory(@PathVariable long unitId, @RequestParam(defaultValue = "50") int limit) {
+        return service.getAckHistory(unitId, limit);
     }
 }

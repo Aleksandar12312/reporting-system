@@ -1,5 +1,7 @@
 package com.example.monitor.api;
 
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.EnumMap;
 import java.util.List;
@@ -7,12 +9,14 @@ import java.util.Locale;
 import java.util.Map;
 
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import com.example.monitor.stats.StatsProperties;
 
 /**
  * What the REST controller calls. Read-only: it loads the numbers with {@link UnitReadRepository}
- * and lets {@link RankingEngine} decide the tiers. Bad parameters throw IllegalArgumentException (status 400).
+ * and lets {@link RankingEngine} decide the tiers and {@link IssueEngine} the component messages.
+ * Bad parameters throw IllegalArgumentException (status 400).
  */
 @Service
 public class UnitQueryService {
@@ -23,16 +27,84 @@ public class UnitQueryService {
     private final UnitReadRepository repository;
     private final StatsProperties stats;
     private final RankingEngine engine;
+    private final IssueRepository issueRepository;
+    private final IssueEngine issueEngine;
 
-    public UnitQueryService(UnitReadRepository repository, StatsProperties stats, RankingProperties ranking) {
+    public UnitQueryService(UnitReadRepository repository, StatsProperties stats, RankingProperties ranking,
+                            IssueRepository issueRepository) {
         this.repository = repository;
         this.stats = stats;
         this.engine = new RankingEngine(ranking);
+        this.issueRepository = issueRepository;
+        this.issueEngine = new IssueEngine(ranking, stats.baselineMinDays());
+        if (!stats.faultSources().containsAll(ranking.recycler().faults())) {
+            throw new IllegalArgumentException("ranking.recycler.faults must all be in stats.fault-sources");
+        }
     }
 
-    /** Every unit, highest ratio first. */
+    /** Every unit, highest ratio first, with its component messages. */
     public List<UnitScore> scoreAllUnits() {
-        return engine.score(repository.loadScoreRows(), repository.loadPartCounts());
+        Map<Long, List<ComponentIssue>> issues = evaluateIssues();
+        return engine.score(repository.loadScoreRows(), repository.loadPartCounts()).stream()
+                .map(s -> s.withIssues(issues.getOrDefault(s.unitId(), List.of())))
+                .toList();
+    }
+
+    /** Component messages of every unit (the model medians need all units, also for one unit). */
+    private Map<Long, List<ComponentIssue>> evaluateIssues() {
+        return issueEngine.evaluate(issueRepository.loadUnitWindows(), issueRepository.loadScannerCounts(),
+                issueRepository.loadRecyclerCounts(), issueRepository.loadLastOks());
+    }
+
+    /** Marks one component of a unit as OK; returns the unit as it is now. 404 if the unit is unknown. */
+    public UnitScore markOk(long unitId, IssueComponent component, AckRequest request) {
+        getUnitScore(unitId);
+        String[] byAndNote = checkAck(request);
+        issueRepository.insertAck(unitId, component, nowUtc(), byAndNote[0], byAndNote[1]);
+        return getUnitScore(unitId);
+    }
+
+    /**
+     * Marks every component of a unit that is ACTIVE or RECURRING as OK (the others stay as they are, so their
+     * counting is not restarted); returns the unit as it is now. 404 if the unit is unknown.
+     */
+    @Transactional
+    public UnitScore markAllOk(long unitId, AckRequest request) {
+        UnitScore current = getUnitScore(unitId);
+        String[] byAndNote = checkAck(request);
+        LocalDateTime now = nowUtc();
+        for (ComponentIssue issue : current.issues()) {
+            if (issue.status() != IssueStatus.OK) {
+                issueRepository.insertAck(unitId, issue.component(), now, byAndNote[0], byAndNote[1]);
+            }
+        }
+        return getUnitScore(unitId);
+    }
+
+    /** Every "marked OK" of one unit, newest first. */
+    public List<IssueAck> getAckHistory(long unitId, int limit) {
+        checkLimit(limit);
+        return issueRepository.loadHistory(unitId, limit);
+    }
+
+    /** Checks the body of a "mark as OK" call; returns {by, note} trimmed (note may be null). */
+    private static String[] checkAck(AckRequest request) {
+        String by = request == null || request.by() == null ? "" : request.by().trim();
+        if (by.isEmpty()) {
+            throw new IllegalArgumentException("Field 'by' is required (who marks it as OK)");
+        }
+        if (by.length() > 100) {
+            throw new IllegalArgumentException("Field 'by' must be at most 100 characters");
+        }
+        String note = request.note() == null || request.note().isBlank() ? null : request.note().trim();
+        if (note != null && note.length() > 500) {
+            throw new IllegalArgumentException("Field 'note' must be at most 500 characters");
+        }
+        return new String[] {by, note};
+    }
+
+    private static LocalDateTime nowUtc() {
+        return LocalDateTime.now(ZoneOffset.UTC);
     }
 
     /** One unit; throws {@link UnitNotFoundException} (status 404) if it has no row in unit_stats. */
@@ -41,7 +113,7 @@ public class UnitQueryService {
         if (scores.isEmpty()) {
             throw new UnitNotFoundException(unitId);
         }
-        return scores.get(0);
+        return scores.get(0).withIssues(evaluateIssues().getOrDefault(unitId, List.of()));
     }
 
     /** Tier counts, window days and the time of the last statistics run. */
@@ -51,10 +123,19 @@ public class UnitQueryService {
         for (Tier tier : Tier.values()) {
             tiers.put(tier, 0);
         }
+        Map<IssueComponent, Integer> issues = new EnumMap<>(IssueComponent.class);
+        for (IssueComponent component : IssueComponent.values()) {
+            issues.put(component, 0);
+        }
         for (UnitScore score : scores) {
             tiers.merge(score.tier(), 1, Integer::sum);
+            for (ComponentIssue issue : score.issues()) {
+                if (issue.status() != IssueStatus.OK) {
+                    issues.merge(issue.component(), 1, Integer::sum);
+                }
+            }
         }
-        return new Summary(repository.loadLastComputedAt(), stats.windowDays(), scores.size(), tiers);
+        return new Summary(repository.loadLastComputedAt(), stats.windowDays(), scores.size(), tiers, issues);
     }
 
     /** One row per model. */

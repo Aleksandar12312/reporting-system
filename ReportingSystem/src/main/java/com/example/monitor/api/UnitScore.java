@@ -1,5 +1,7 @@
 package com.example.monitor.api;
 
+import java.util.List;
+
 /**
  * One unit as the REST API returns it (GET /api/units/scores and similar).
  *
@@ -11,6 +13,7 @@ package com.example.monitor.api;
  * @param topPart         component with the most faults; null if the unit has no faults
  * @param topPartShare    topPartFaults divided by faults (0 to 1); null if the unit has no faults
  * @param scope           PART or GENERAL for flagged units with enough faults, otherwise null
+ * @param issues          one entry per component (SCANNER, RECYCLER): is something wrong with it
  */
 public record UnitScore(
         long unitId,
@@ -25,7 +28,18 @@ public record UnitScore(
         String topPart,
         int topPartFaults,
         Double topPartShare,
-        ProblemScope scope) {
+        ProblemScope scope,
+        List<ComponentIssue> issues) {
+
+    public UnitScore {
+        issues = issues == null ? List.of() : List.copyOf(issues);
+    }
+
+    /** The same score with the given component messages. */
+    public UnitScore withIssues(List<ComponentIssue> newIssues) {
+        return new UnitScore(unitId, serialNumber, modelName, faults, exposureDays, ratePerDay, modelMedianRate,
+                ratioToModel, tier, topPart, topPartFaults, topPartShare, scope, newIssues);
+    }
 
     /** True for WATCH and CRITICAL. */
     public boolean isFlagged() {

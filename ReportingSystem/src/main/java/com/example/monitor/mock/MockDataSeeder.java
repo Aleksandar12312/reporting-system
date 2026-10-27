@@ -134,6 +134,7 @@ public class MockDataSeeder implements ApplicationRunner {
         add(list, Profile.BORDERLINE, p.borderline());
         add(list, Profile.NEW_FEW_FAULTS, p.newFewFaults());
         add(list, Profile.SILENT, p.silent());
+        add(list, Profile.DIRTY_SCANNER, p.dirtyScanner());
         while (list.size() < props.unitCount()) {
             list.add(Profile.NORMAL);
         }

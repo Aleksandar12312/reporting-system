@@ -26,12 +26,14 @@ mock:
 
   # How many units get a special behaviour. The rest are NORMAL.
   # Multipliers on the model rate: bad x8, bad-one-component x6, borderline x2.5, new-few-faults x2, silent = no events.
+  # dirty-scanner: normal faults, but the scanner rejects 30% of the notes instead of 8%.
   planted:
     bad: 15
     bad-one-component: 10
     borderline: 15
     new-few-faults: 5
     silent: 5
+    dirty-scanner: 8
 
 # Thresholds of the REST API (tier and scope). The window, baseline and fault sources are in the stats: block below.
 ranking:
@@ -40,6 +42,24 @@ ranking:
   critical-ratio: 4.0      # rate >= 4 x model median = CRITICAL
   part-min-faults: 8       # PART/GENERAL is decided only from this many faults
   part-share: 0.5          # one component with >= 50% of the faults = PART
+  recurring-days: 14       # a problem back within 14 days after "marked OK" is RECURRING
+  scanner:                 # "something is wrong with the scanner": share of rejected notes vs. the model median
+    min-reads: 30          # at least this many notes read (in the window, or since "marked OK")
+    min-rejects: 5         # and at least this many rejected
+    ratio: 2.0             # reject share >= 2 x model median
+  recycler:                # "something is wrong with the recycler": faults per day vs. the model median
+    min-days: 3            # at least this many days of data (in the window, or since "marked OK")
+    min-faults: 5          # and at least this many recycler faults
+    ratio: 2.0             # faults per day >= 2 x model median
+    faults:                # payout errors and note jams (must also be in stats.fault-sources)
+      - ERROR_DURING_PAYOUT
+      - INCOMPLETE_PAYOUT
+      - INCOMPLETE_FLOAT
+      - PAYOUT_OUT_OF_SERVICE
+      - TIME_OUT
+      - SAFE_NOTE_JAM
+      - UNSAFE_NOTE_JAM
+      - JAMMED
 
 # Statistics tables (unit_fault_daily, unit_stats, model_stats), kept up to date by the Spring Batch job
 stats:

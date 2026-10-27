@@ -17,6 +17,7 @@ import org.springframework.stereotype.Repository;
  *
  * <ul>
  *   <li>unit_fault_daily: faults per unit, day, component and fault name</li>
+ *   <li>unit_scanner_daily: notes read and notes rejected per unit and day</li>
  *   <li>unit_stats: one row per unit (faults and rate in the window)</li>
  *   <li>model_stats: one row per model (median and mean rate)</li>
  *   <li>stats_etl_state: one row, the id of the last event already counted</li>
@@ -28,6 +29,10 @@ public class StatsRepository {
 
     static final String SCHEMA_SCRIPT = "db/schema_stats.sql";
     private static final String UNKNOWN_PART = "UNKNOWN";
+    /** event.source of a note being read by the scanner. */
+    static final String READ_NOTE = "READ_NOTE";
+    /** event.source of a note the scanner refused. */
+    static final String NOTE_REJECTED = "NOTE_REJECTED";
 
     private final JdbcTemplate jdbc;
     private final List<String> faultSources;
@@ -108,6 +113,19 @@ public class StatsRepository {
         return found != null && found > 0;
     }
 
+    public boolean scannerTableIsEmpty() {
+        Integer any = jdbc.queryForObject("select exists(select 1 from unit_scanner_daily)", Integer.class);
+        return any == null || any == 0;
+    }
+
+    /** True when at least one READ_NOTE or NOTE_REJECTED event has an id up to {@code eventId}. */
+    public boolean scannerEventsExistUpTo(long eventId) {
+        Integer any = jdbc.queryForObject(
+                "select exists(select 1 from event where id <= ? and source in (?, ?))",
+                Integer.class, eventId, READ_NOTE, NOTE_REJECTED);
+        return any != null && any > 0;
+    }
+
     public boolean dailyTableIsEmpty() {
         Integer any = jdbc.queryForObject("select exists(select 1 from unit_fault_daily)", Integer.class);
         return any == null || any == 0;
@@ -127,6 +145,7 @@ public class StatsRepository {
      */
     public void deleteAllStats() {
         jdbc.update("delete from unit_fault_daily");
+        jdbc.update("delete from unit_scanner_daily");
         jdbc.update("delete from unit_stats");
         jdbc.update("delete from model_stats");
         jdbc.update("delete from stats_etl_state");
@@ -159,6 +178,30 @@ public class StatsRepository {
                 on duplicate key update faults = unit_fault_daily.faults + n.faults
                 """.formatted(UNKNOWN_PART, sourcePlaceholders, UNKNOWN_PART);
         return jdbc.update(sql, withSources(fromId, toId));
+    }
+
+    // ------------------------------------------------------------------ unit_scanner_daily
+
+    /**
+     * Like {@link #addFaultsToDaily(long, long)}, for the scanner: the READ_NOTE and NOTE_REJECTED events with an id
+     * in (fromId, toId] are counted per unit and day and added to unit_scanner_daily.
+     *
+     * @return rows inserted or changed, as MySQL reports them (a changed row counts as 2)
+     */
+    public int addScannerToDaily(long fromId, long toId) {
+        return jdbc.update("""
+                insert into unit_scanner_daily (unit_id, event_date, notes_read, notes_rejected)
+                select n.unit_id, n.event_date, n.notes_read, n.notes_rejected
+                from (
+                    select e.unit_id, date(e.event_time) as event_date,
+                           sum(e.source = ?) as notes_read, sum(e.source = ?) as notes_rejected
+                    from event e
+                    where e.id > ? and e.id <= ? and e.source in (?, ?)
+                    group by e.unit_id, date(e.event_time)
+                ) n
+                on duplicate key update notes_read = unit_scanner_daily.notes_read + n.notes_read,
+                    notes_rejected = unit_scanner_daily.notes_rejected + n.notes_rejected
+                """, READ_NOTE, NOTE_REJECTED, fromId, toId, READ_NOTE, NOTE_REJECTED);
     }
 
     // ------------------------------------------------------------------ unit_stats

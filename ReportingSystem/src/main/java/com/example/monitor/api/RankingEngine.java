@@ -60,7 +60,7 @@ public final class RankingEngine {
                     median, ratio, tier,
                     top == null ? null : top.part(),
                     top == null ? 0 : top.faults(),
-                    share, scope));
+                    share, scope, List.of()));
         }
         scores.sort(WORST_FIRST);
         return List.copyOf(scores);

@@ -23,6 +23,8 @@ about 35 events per unit per day, ~620,000 events for the 90-day history. Comman
 in the list but never generated. Only FAULT events count as problems (`stats.fault-sources`).
 
 The answer key (which unit got which planted behaviour) is in the table `mock_unit_profile`.
+`mock.planted.dirty-scanner` units have normal faults, but their scanner rejects 30% of the notes instead of 8%.
+New profiles only appear after a re-seed (see below); an existing database keeps its units.
 
 ## Re-seeding from scratch
 
@@ -50,7 +52,28 @@ the event lists are read live from `event`.
 - `/api/models`: one row per model from `model_stats`
 - `/api/fault-kinds`: the fault kinds that are counted (`stats.fault-sources`)
 
+- `POST /api/units/{unitId}/issues/{component}/ack` with `{"by": "Marko", "note": "scanner cleaned"}`:
+  mark `SCANNER` or `RECYCLER` of a unit as OK; answers with the unit as it is now
+- `POST /api/units/{unitId}/issues/ack`: the same for every component that has a problem now
+- `/api/units/{unitId}/issues/history?limit=50`: every "marked OK" of a unit, newest first
+
 `limit` must be between 1 and 1000. A wrong value gives status 400 with the reason.
+The two POST calls are the only calls that write; they write only to `unit_issue_ack`.
+
+### Component messages (`issues`)
+
+Every unit in the API has `issues`: one entry per component, `SCANNER` and `RECYCLER`, with
+`status` `OK`, `ACTIVE` (something is wrong) or `RECURRING` (wrong again within `ranking.recurring-days`
+after it was marked OK). `IssueEngine` decides, with the thresholds in `ranking.scanner` and `ranking.recycler`:
+
+- **Scanner:** share of rejected notes (`NOTE_REJECTED / READ_NOTE`, from `unit_scanner_daily`) at least
+  2 x the median of the model, with at least 30 notes read and 5 rejected
+- **Recycler:** faults per day of the payout and jam faults (`ranking.recycler.faults`) at least 2 x the median of
+  the model, with at least 5 faults in at least 3 days
+
+"Marked OK" is stored in `unit_issue_ack` (created by the app, `db/schema_issues.sql`, never touched by a statistics
+rebuild). After it, only the days after that day count for that unit and component, so old data cannot bring the
+message back; the model medians always use every unit's whole window.
 
 Tier and scope are decided by `RankingEngine` from the `ranking:` block of `application-dev.yml`
 (`min-faults`, `watch-ratio`, `critical-ratio`, `part-min-faults`, `part-share`). The rate, the model median, the window and the
@@ -61,12 +84,13 @@ Tests: `mvn test`.
 
 ## Statistics tables (package `stats`, Spring Batch)
 
-The job `statsRefreshJob` keeps four tables up to date, so large amounts of data do not have to be counted again
+The job `statsRefreshJob` keeps five tables up to date, so large amounts of data do not have to be counted again
 for every question:
 
 - `unit_fault_daily`: faults per unit, day, component and fault name
 - `unit_stats`: one row per unit (also a new unit without faults): faults and rate in the window, total faults, last fault day
 - `model_stats`: one row per model: unit counts, faults, median and mean faults per day of the baseline units
+- `unit_scanner_daily`: notes read and notes rejected per unit and day (for the scanner message)
 - `stats_etl_state`: the id of the last event already counted
 
 Window, baseline and fault sources come from the `stats:` block. The window is counted in whole days (from the first day of the window).
@@ -76,7 +100,8 @@ When it runs: once when the app is ready (after the mock seeder), then on `stats
 
 1. `prepareStatsStep`: if the tables are empty, or the event table was re-created (re-seed), everything is built
    again from the start; otherwise only the new events are read
-2. `unitFaultDailyStep`: the new fault events are added to `unit_fault_daily`, `stats.slice-size` event ids per transaction
+2. `unitFaultDailyStep`: the new fault events are added to `unit_fault_daily` and the new READ_NOTE / NOTE_REJECTED
+   events to `unit_scanner_daily`, `stats.slice-size` event ids per transaction
    (the counting and the new last event id are committed together, so a crash never counts an event twice)
 3. `unitStatsStep`: reader / processor / writer, one `unit_stats` row per unit
 4. `modelStatsStep`: `model_stats` calculated again (one row per model)

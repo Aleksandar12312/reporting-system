@@ -10,7 +10,8 @@ import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
 
 /**
- * Step 2 of the job: adds the new fault events to unit_fault_daily.
+ * Step 2 of the job: adds the new fault events to unit_fault_daily and the new scanner events
+ * (READ_NOTE, NOTE_REJECTED) to unit_scanner_daily.
  *
  * The new events are the ids after the state's last_event_id, up to the id fixed by step 1. They are read in
  * slices of {@code stats.slice-size} ids. Spring Batch calls this tasklet once per slice, each call in its own
@@ -46,9 +47,12 @@ public class UnitFaultDailyTasklet implements Tasklet {
             return RepeatStatus.FINISHED;
         }
         long to = Math.min(toEventId, from + sliceSize);
+        // Both tables and the new state are committed together, so neither can count an event twice
         int rows = stats.addFaultsToDaily(from, to);
+        int scannerRows = stats.addScannerToDaily(from, to);
         stats.saveState(to, runAt);
-        log.info("unit_fault_daily: events {}..{} added ({} rows written)", from + 1, to, rows);
+        log.info("unit_fault_daily / unit_scanner_daily: events {}..{} added ({} / {} rows written)",
+                from + 1, to, rows, scannerRows);
         return to >= toEventId ? RepeatStatus.FINISHED : RepeatStatus.CONTINUABLE;
     }
 }

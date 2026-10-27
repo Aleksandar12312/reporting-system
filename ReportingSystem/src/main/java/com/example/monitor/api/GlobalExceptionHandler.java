@@ -8,6 +8,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -31,6 +32,13 @@ public class GlobalExceptionHandler {
     @ResponseStatus(HttpStatus.BAD_REQUEST)
     public Map<String, String> wrongType(MethodArgumentTypeMismatchException e) {
         return error("Parameter '" + e.getName() + "' has an invalid value '" + e.getValue() + "'");
+    }
+
+    /** The JSON body of a POST cannot be read. */
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> unreadableBody(HttpMessageNotReadableException e) {
+        return error("The request body is not valid JSON, expected {\"by\": \"...\", \"note\": \"...\"}");
     }
 
     /** A required parameter is missing. */
