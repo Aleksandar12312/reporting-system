@@ -1,13 +1,25 @@
-import { DatePipe, DecimalPipe, NgTemplateOutlet, PercentPipe } from '@angular/common';
-import { Component, computed, effect, inject, input, signal, untracked } from '@angular/core';
+import { DatePipe, DecimalPipe, Location, NgTemplateOutlet, PercentPipe } from '@angular/common';
+import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { RouterLink } from '@angular/router';
+import { Router } from '@angular/router';
 import { ApiCall } from '../core/api-call';
 import { AppMetaService } from '../core/app-meta.service';
 import { DevModeService } from '../core/dev-mode.service';
-import { FaultBreakdown, UnitEvent, UnitScore } from '../core/models';
+import { FaultBreakdown, ISSUE_COMPONENTS, IssueAck, UnitEvent, UnitScore } from '../core/models';
 import { UnitsApiService } from '../core/units-api.service';
 import { CallStatus } from '../shared/call-status';
+import {
+  AckTarget,
+  isCollecting,
+  issueDetail,
+  issueOf,
+  issueTitle,
+  markedOkMessage,
+  partLabel,
+  partName,
+  problemsOf,
+} from '../shared/issues';
+import { MarkOkDialog } from '../shared/mark-ok-dialog';
 import { TierBadge } from '../shared/tier-badge';
 import { UtcDatePipe } from '../shared/utc-date.pipe';
 
@@ -22,11 +34,16 @@ export const NONE = '__none__';
  */
 @Component({
   selector: 'app-unit-detail-page',
-  imports: [FormsModule, RouterLink, NgTemplateOutlet, DatePipe, DecimalPipe, PercentPipe, UtcDatePipe, TierBadge, CallStatus],
+  imports: [
+    FormsModule, NgTemplateOutlet, DatePipe, DecimalPipe, PercentPipe,
+    UtcDatePipe, TierBadge, CallStatus, MarkOkDialog,
+  ],
   templateUrl: './unit-detail-page.html',
 })
 export class UnitDetailPage {
   private readonly api = inject(UnitsApiService);
+  private readonly location = inject(Location);
+  private readonly router = inject(Router);
   protected readonly meta = inject(AppMetaService);
   protected readonly dev = inject(DevModeService);
 
@@ -45,6 +62,21 @@ export class UnitDetailPage {
   protected readonly faults = new ApiCall<FaultBreakdown[]>();
   protected readonly events = new ApiCall<UnitEvent[]>();
   protected readonly faultEvents = new ApiCall<UnitEvent[]>();
+
+  // ---------- Scanner / recycler problems ----------
+  protected readonly issueTitle = issueTitle;
+  protected readonly issueDetail = issueDetail;
+  protected readonly partLabel = partLabel;
+  protected readonly partName = partName;
+
+  /** Open "Mark as OK" dialog, or null. */
+  protected readonly dialogTarget = signal<AckTarget | null>(null);
+  /** Short confirmation after a successful "Mark as OK". */
+  protected readonly toast = signal<string | null>(null);
+  private toastTimer: ReturnType<typeof setTimeout> | undefined;
+
+  protected readonly historyOpen = signal(false);
+  protected readonly history = new ApiCall<IssueAck[]>();
 
   // ---------- Filters (client-side, applied to the loaded event lists) ----------
   protected readonly search = signal('');
@@ -111,11 +143,20 @@ export class UnitDetailPage {
     return this.unitFallback.error();
   });
 
+  /** Components with status ACTIVE or RECURRING – one message box each. */
+  protected readonly problems = computed(() => problemsOf(this.summary()));
+
+  /** Components marked OK recently, still collecting new data (quiet note, no box). */
+  protected readonly collecting = computed(() =>
+    ISSUE_COMPONENTS.map((c) => issueOf(this.summary(), c)).filter(isCollecting),
+  );
+
   protected readonly maxFaults = computed(() =>
     Math.max(1, ...(this.faults.data() ?? []).map((f) => f.faults)),
   );
 
   constructor() {
+    inject(DestroyRef).onDestroy(() => clearTimeout(this.toastTimer));
     this.meta.ensureFaultKinds();
     // Reload everything (and reset filters) whenever the :id in the URL changes.
     effect(() => {
@@ -123,6 +164,8 @@ export class UnitDetailPage {
       untracked(() => {
         this.clearFilters();
         this.breakdownSearch.set('');
+        this.dialogTarget.set(null);
+        this.history.reset();
         this.loadAll(id);
       });
     });
@@ -136,14 +179,57 @@ export class UnitDetailPage {
   }
 
   protected loadHeader(id = this.id()): void {
-    this.unitFallback.data.set(null);
-    this.unitFallback.error.set(null);
-    this.unit.run(this.api.unit(id), () => {
-      // 404: either the endpoint does not exist yet or the unit is unknown – /scores answers both.
-      if (this.unit.errorStatus() === 404) {
-        this.unitFallback.run(this.api.scores());
-      }
+    this.unitFallback.reset();
+    this.unit.run(this.api.unit(id), {
+      onError: () => {
+        // 404: either the endpoint does not exist yet or the unit is unknown – /scores answers both.
+        if (this.unit.errorStatus() === 404) {
+          this.unitFallback.run(this.api.scores());
+        }
+      },
     });
+  }
+
+  protected loadHistory(id = this.id()): void {
+    this.history.run(this.api.ackHistory(id));
+  }
+
+  protected onHistoryToggle(event: Event): void {
+    const open = (event.target as HTMLDetailsElement).open;
+    this.historyOpen.set(open);
+    if (open) this.loadHistory();
+  }
+
+  /** Back to where the user came from (list, part problems, …); the part problems page when opened directly. */
+  protected goBack(event: Event): void {
+    event.preventDefault();
+    const state = this.location.getState() as { navigationId?: number } | null;
+    if (state?.navigationId && state.navigationId > 1) {
+      this.location.back();
+    } else {
+      this.router.navigate(['/parts']);
+    }
+  }
+
+  openMarkOk(target: AckTarget): void {
+    this.dialogTarget.set(target);
+  }
+
+  /** The POST answered with the unit as it is now: update the header without reloading the page. */
+  onMarkedOk(unit: UnitScore): void {
+    const target = this.dialogTarget();
+    this.unit.setData(unit);
+    this.unitFallback.reset();
+    this.dialogTarget.set(null);
+    if (target) this.showToast(markedOkMessage(target));
+    if (this.historyOpen()) this.loadHistory();
+    this.meta.loadSummary(); // issue counts in the dashboard changed
+  }
+
+  private showToast(message: string): void {
+    clearTimeout(this.toastTimer);
+    this.toast.set(message);
+    this.toastTimer = setTimeout(() => this.toast.set(null), 4000);
   }
 
   protected loadFaults(id = this.id()): void {

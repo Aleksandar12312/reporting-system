@@ -1,7 +1,8 @@
 <header class="topbar">
   <div class="topbar-inner">
-    <a routerLink="/units" class="brand">Problematic Units</a>
+    <a routerLink="/parts" class="brand">Problematic Units</a>
     <nav>
+      <a routerLink="/parts" routerLinkActive="active">Part problems</a>
       <a routerLink="/units" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Unit ranking</a>
       <a routerLink="/top-by-fault" routerLinkActive="active">By fault kind</a>
       <a routerLink="/models" routerLinkActive="active">Models</a>

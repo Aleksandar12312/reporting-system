@@ -536,3 +536,366 @@ table.sortable th button:hover {
 table.sortable th.num button {
   text-align: right;
 }
+
+/* ---------- Scanner / recycler messages ---------- */
+.issues {
+  margin-bottom: 16px;
+}
+
+.issues-head {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 8px;
+}
+
+.issue-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 16px;
+  margin-bottom: 8px;
+  border: 1px solid;
+  border-left-width: 4px;
+  border-radius: 8px;
+}
+
+.issue-box.issue-ACTIVE {
+  background: var(--watch-bg);
+  border-color: #f3d19e;
+  border-left-color: var(--watch);
+}
+
+.issue-box.issue-RECURRING {
+  background: var(--critical-bg);
+  border-color: #f5c2bd;
+  border-left-color: var(--critical);
+}
+
+.issue-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.issue-ACTIVE .issue-title {
+  color: var(--watch);
+}
+
+.issue-RECURRING .issue-title {
+  color: var(--critical);
+}
+
+.issue-box button {
+  flex-shrink: 0;
+}
+
+.collecting {
+  margin: 4px 0;
+}
+
+/* ---------- Parts chips (ranking) ---------- */
+.parts {
+  white-space: nowrap;
+}
+
+.chip {
+  display: inline-block;
+  padding: 1px 8px;
+  margin-right: 4px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.chip-ACTIVE {
+  background: var(--watch-bg);
+  color: var(--watch);
+}
+
+.chip-RECURRING {
+  background: var(--critical-bg);
+  color: var(--critical);
+}
+
+.card-issue {
+  border-left-color: var(--primary);
+}
+
+.card-issue .tier-card-count {
+  color: var(--primary);
+}
+
+/* ---------- OK history ---------- */
+.history summary {
+  cursor: pointer;
+  list-style: revert;
+}
+
+.history summary h2 {
+  display: inline;
+}
+
+.history[open] summary {
+  margin-bottom: 12px;
+}
+
+td.wrap {
+  white-space: normal;
+  min-width: 200px;
+}
+
+/* ---------- Dialog ---------- */
+.dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.45);
+  z-index: 100;
+}
+
+.dialog {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 20px;
+  background: var(--surface);
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.25);
+  z-index: 101;
+}
+
+.dialog h2 {
+  margin-bottom: 4px;
+}
+
+.dialog .field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 12px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.dialog .field input,
+.dialog .field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  color: var(--text);
+}
+
+.dialog textarea {
+  padding: 6px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  resize: vertical;
+}
+
+.dialog .counter {
+  align-self: flex-end;
+}
+
+.dialog .status,
+.dialog .request-url {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  padding: 10px 16px;
+  background: #1f2937;
+  color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  z-index: 110;
+}
+
+/* ---------- Part problems first ---------- */
+.part-cards {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  align-items: stretch;
+  margin-bottom: 12px;
+}
+
+.part-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  min-width: 220px;
+  padding: 16px 20px;
+  border: 1px solid var(--border);
+  border-left: 6px solid var(--watch);
+  border-radius: 10px;
+  background: var(--surface);
+  text-align: left;
+}
+
+.part-card:hover:not(:disabled) {
+  background: #fffaf2;
+}
+
+.part-card.active {
+  box-shadow: 0 0 0 2px var(--primary);
+}
+
+.part-card-count {
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--watch);
+  font-variant-numeric: tabular-nums;
+}
+
+.part-card-label {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* Tier cards are secondary: smaller, one row */
+.tier-cards.secondary {
+  align-items: center;
+  gap: 8px;
+}
+
+.tier-cards-title {
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-right: 4px;
+}
+
+.tier-cards.secondary .tier-card {
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 6px 10px;
+  border-left-width: 3px;
+}
+
+.tier-cards.secondary .tier-card-count {
+  font-size: 16px;
+}
+
+/* Prominent "Part problems" filter on the ranking */
+.parts-filter {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.parts-filter-label {
+  font-weight: 600;
+  margin-right: 6px;
+}
+
+.parts-filter button,
+.part-switch .part-tab {
+  border-radius: 999px;
+}
+
+.parts-filter button.active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+/* Part problems page */
+.part-switch {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+
+.part-switch .part-tab {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.part-switch .part-tab.active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary);
+}
+
+.part-tab-label {
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.part-tab-count {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--watch);
+  font-variant-numeric: tabular-nums;
+}
+
+.part-tab-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.filters label.check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text);
+  padding-bottom: 6px;
+}
+
+.filters label.check input {
+  padding: 0;
+}
+
+th.secondary-col,
+td.secondary-col {
+  opacity: 0.75;
+}
+
+/* Unit header: part status before the tier */
+.unit-header .issues {
+  margin: 4px 0 16px;
+}
+
+.parts-ok {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--ok-bg);
+  color: var(--ok);
+  font-weight: 600;
+}
+
+.parts-ok-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--ok);
+}

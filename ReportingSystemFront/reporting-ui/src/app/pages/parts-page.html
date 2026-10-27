@@ -1,0 +1,140 @@
+<div class="page-head">
+  <h1>Part problems</h1>
+  <button type="button" (click)="load()" [disabled]="call.loading()">{{ dev.enabled() ? 'Call' : 'Refresh' }}</button>
+</div>
+
+<div class="part-switch" role="tablist" aria-label="Part">
+  @for (c of components; track c) {
+    <button
+      type="button"
+      role="tab"
+      class="part-tab"
+      [class.active]="part() === c"
+      [attr.aria-selected]="part() === c"
+      (click)="part.set(c)"
+    >
+      <span class="part-tab-label">{{ partLabel(c) }}</span>
+      @if (call.data()) {
+        <span class="part-tab-count">{{ problemCounts()[c] }}</span>
+        <span class="part-tab-note">{{ problemCounts()[c] === 1 ? 'unit' : 'units' }} with a problem</span>
+      }
+    </button>
+  }
+</div>
+
+<div class="filters">
+  <label>
+    Search
+    <input type="search" placeholder="Serial number or ID" [(ngModel)]="search" />
+  </label>
+  <label>
+    Model
+    <select [(ngModel)]="model">
+      <option value="">All models</option>
+      @for (m of modelOptions(); track m) {
+        <option [value]="m">{{ m }}</option>
+      }
+    </select>
+  </label>
+  <label class="check">
+    <input type="checkbox" [checked]="showAll()" (change)="showAll.set(!showAll())" />
+    Show all units
+  </label>
+</div>
+
+<app-call-status [call]="call" />
+
+@if (call.data(); as units) {
+  @if (units.length) {
+    <p class="muted small">
+      {{ rows().length }} unit(s){{ showAll() ? '' : ' with a ' + partLabel(part()).toLowerCase() + ' problem' }}.
+      Worst first: recurring, then active, then the highest ratio to similar units. Click a row to open the unit.
+    </p>
+    @if (rows().length) {
+      <div class="table-wrap">
+        <table class="clickable">
+          <thead>
+            <tr>
+              <th class="num">#</th>
+              <th>ID</th>
+              <th>Serial number</th>
+              <th>Model</th>
+              <th>{{ partLabel(part()) }}</th>
+              @if (isScanner()) {
+                <th class="num">Rejected notes</th>
+              } @else {
+                <th class="num">Faults / day</th>
+              }
+              <th class="num">Similar units</th>
+              <th class="num">Ratio</th>
+              <th class="num">{{ isScanner() ? 'Notes read' : 'Faults counted' }}</th>
+              <th>Counting since</th>
+              <th>Last marked OK</th>
+              <th class="secondary-col">Tier</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of rows(); track u.unitId; let n = $index) {
+              @let i = issueOf(u, part());
+              <tr (click)="openUnit(u.unitId)" tabindex="0" (keydown.enter)="openUnit(u.unitId)">
+                <td class="num muted">{{ n + 1 }}</td>
+                <td>{{ u.unitId }}</td>
+                <td><strong>{{ u.serialNumber || '—' }}</strong></td>
+                <td>{{ u.modelName || '—' }}</td>
+                <td>
+                  @if (i && i.status !== 'OK') {
+                    <span [class]="'chip chip-' + i.status">{{ statusLabel(i) }}</span>
+                  } @else {
+                    <span class="muted">{{ statusLabel(i) }}</span>
+                  }
+                  @if (i && !i.enoughData) {
+                    <span class="muted small" title="Too little new data to judge yet"> · collecting</span>
+                  }
+                </td>
+                <td class="num">
+                  @if (i?.value === null || i?.value === undefined) {
+                    —
+                  } @else if (isScanner()) {
+                    {{ i!.value! * 100 | number: '1.0-0' }}%
+                  } @else {
+                    {{ i!.value | number: '1.2-2' }}
+                  }
+                </td>
+                <td class="num muted">
+                  @if (i?.modelMedian === null || i?.modelMedian === undefined) {
+                    —
+                  } @else if (isScanner()) {
+                    {{ i!.modelMedian! * 100 | number: '1.0-0' }}%
+                  } @else {
+                    {{ i!.modelMedian | number: '1.2-2' }}
+                  }
+                </td>
+                <td class="num">
+                  @if (i?.ratio !== null && i?.ratio !== undefined) { {{ i!.ratio | number: '1.1-1' }}× } @else { — }
+                </td>
+                <td class="num">{{ i?.sample ?? '—' }}</td>
+                <td class="nowrap">{{ (i?.countingSince | utcDate | date: 'dd.MM.yyyy') ?? '—' }}</td>
+                <td class="nowrap">
+                  @if (i?.lastOkAt) {
+                    {{ i!.lastOkAt | utcDate | date: 'dd.MM.yyyy' }} <span class="muted">by {{ i!.lastOkBy || '—' }}</span>
+                  } @else {
+                    <span class="muted">never</span>
+                  }
+                </td>
+                <td class="secondary-col"><app-tier-badge [tier]="u.tier" /></td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="status muted">
+        @if (search() || model()) {
+          No units match the current filters.
+        } @else {
+          No unit has a {{ partLabel(part()).toLowerCase() }} problem right now.
+        }
+      </div>
+    }
+  }
+}

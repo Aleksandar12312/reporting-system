@@ -2,13 +2,34 @@
   <h1>Unit ranking</h1>
 </div>
 
-<!-- Dashboard: tier counts from GET /api/summary (hidden while that endpoint is not available) -->
+<!-- Dashboard from GET /api/summary (hidden while that endpoint is not available):
+     part problems first, tier counts second -->
 @if (meta.summary(); as s) {
-  <div class="tier-cards">
+  @if (s.issues; as issues) {
+    <div class="part-cards">
+      @for (c of issueComponents; track c) {
+        <button
+          type="button"
+          class="part-card"
+          [class.active]="parts() === c"
+          [attr.aria-pressed]="parts() === c"
+          (click)="showParts(c)"
+        >
+          <span class="part-card-count">{{ issues[c] ?? 0 }}</span>
+          <span class="part-card-label">{{ partLabel(c) }} problems</span>
+        </button>
+      }
+      <div class="tier-cards-note muted small">
+        {{ s.unitCount }} units · last {{ s.windowDays }} days<br />
+        Click a card to filter the list.
+      </div>
+    </div>
+  }
+  <div class="tier-cards secondary">
+    <span class="tier-cards-title muted small">Tier</span>
     @for (t of tiers; track t) {
       <button
         type="button"
-        class="tier-card"
         [class]="'tier-card card-' + t"
         [class.active]="isActiveCard(t)"
         [attr.aria-pressed]="isActiveCard(t)"
@@ -18,10 +39,9 @@
         <span class="tier-card-label">{{ t }}</span>
       </button>
     }
-    <div class="tier-cards-note muted small">
-      {{ s.unitCount }} units · last {{ s.windowDays }} days<br />
-      Click a card to filter the list.
-    </div>
+    @if (!s.issues) {
+      <div class="tier-cards-note muted small">{{ s.unitCount }} units · last {{ s.windowDays }} days</div>
+    }
   </div>
 }
 
@@ -35,6 +55,16 @@
   <button type="button" role="tab" [class.active]="mode() === 'scores'" [attr.aria-selected]="mode() === 'scores'" (click)="setMode('scores')">
     All units @if (dev.enabled()) { <code>/scores</code> }
   </button>
+</div>
+
+<div class="parts-filter" role="group" aria-label="Filter by part problem">
+  <span class="parts-filter-label">Part problems</span>
+  <button type="button" [class.active]="parts() === ''" [attr.aria-pressed]="parts() === ''" (click)="showParts('')">All units</button>
+  @for (c of issueComponents; track c) {
+    <button type="button" [class.active]="parts() === c" [attr.aria-pressed]="parts() === c" (click)="parts.set(c)">
+      {{ partLabel(c) }}
+    </button>
+  }
 </div>
 
 <form class="filters" (ngSubmit)="load()">
@@ -91,7 +121,7 @@
       } @else {
         Showing {{ rows().length }} of {{ units.length }} unit(s).
       }
-      Click a row to open the unit; click a column header to sort.
+      Part problems first, then tier. Click a row to open the unit; click a column header to sort.
     </p>
     @if (rows().length) {
       <div class="table-wrap">
@@ -101,6 +131,7 @@
               <th [attr.aria-sort]="ariaSort('unitId')"><button type="button" (click)="sortBy('unitId')">ID {{ sortMark('unitId') }}</button></th>
               <th [attr.aria-sort]="ariaSort('serialNumber')"><button type="button" (click)="sortBy('serialNumber')">Serial number {{ sortMark('serialNumber') }}</button></th>
               <th [attr.aria-sort]="ariaSort('modelName')"><button type="button" (click)="sortBy('modelName')">Model {{ sortMark('modelName') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('parts')"><button type="button" (click)="sortBy('parts')">Part problems {{ sortMark('parts') }}</button></th>
               <th [attr.aria-sort]="ariaSort('tier')"><button type="button" (click)="sortBy('tier')">Tier {{ sortMark('tier') }}</button></th>
               <th class="num" [attr.aria-sort]="ariaSort('ratioToModel')"><button type="button" (click)="sortBy('ratioToModel')">Ratio {{ sortMark('ratioToModel') }}</button></th>
               <th class="num" [attr.aria-sort]="ariaSort('faults')"><button type="button" (click)="sortBy('faults')">Faults {{ sortMark('faults') }}</button></th>
@@ -117,6 +148,13 @@
                 <td>{{ u.unitId }}</td>
                 <td><strong>{{ u.serialNumber || '—' }}</strong></td>
                 <td>{{ u.modelName || '—' }}</td>
+                <td class="parts">
+                  @for (i of problemsOf(u); track i.component) {
+                    <span [class]="'chip chip-' + i.status">{{ chipLabel(i) }}</span>
+                  } @empty {
+                    <span class="muted">—</span>
+                  }
+                </td>
                 <td><app-tier-badge [tier]="u.tier" /></td>
                 <td class="num">
                   @if (u.ratioToModel !== null) { {{ u.ratioToModel | number: '1.1-1' }}× } @else { — }

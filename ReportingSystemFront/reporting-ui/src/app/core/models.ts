@@ -39,6 +39,8 @@ export interface UnitScore {
   topPartFaults: number;
   topPartShare: number | null;
   scope: ProblemScope | null;
+  /** Scanner and recycler status; always two entries, but find them by `component`, never by index. */
+  issues: ComponentIssue[];
 }
 
 export interface FaultRanking {
@@ -87,6 +89,8 @@ export interface Summary {
   windowDays: number;
   unitCount: number;
   tiers: Record<Tier, number>;
+  /** Units with an ACTIVE or RECURRING problem, per component. */
+  issues?: Record<IssueComponent, number>;
 }
 
 export interface DailyFaultRow {
@@ -94,4 +98,43 @@ export interface DailyFaultRow {
   part: string;
   fault: string;
   faults: number;
+}
+
+// ---------- Scanner / recycler problems ----------
+
+export type IssueComponent = 'SCANNER' | 'RECYCLER';
+export type IssueStatus = 'OK' | 'ACTIVE' | 'RECURRING';
+export type IssueMetric = 'REJECT_SHARE' | 'FAULTS_PER_DAY';
+
+export const ISSUE_COMPONENTS: IssueComponent[] = ['SCANNER', 'RECYCLER'];
+
+export interface ComponentIssue {
+  component: IssueComponent;
+  status: IssueStatus;
+  metric: IssueMetric;
+  value: number | null;
+  modelMedian: number | null;
+  ratio: number | null;
+  sample: number;
+  enoughData: boolean;
+  /** UTC, no zone: pass through utcDate */
+  countingSince: string;
+  /** UTC, no zone */
+  lastOkAt: string | null;
+  lastOkBy: string | null;
+  lastOkNote: string | null;
+}
+
+export interface AckRequest {
+  by: string;
+  note?: string | null;
+}
+
+export interface IssueAck {
+  id: number;
+  unitId: number;
+  component: IssueComponent;
+  ackedAt: string;
+  ackedBy: string;
+  note: string | null;
 }

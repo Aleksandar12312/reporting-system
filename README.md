@@ -5,7 +5,7 @@ Finds machines (units) whose bill recycler fails more often than other units of 
 | Folder | What it is |
 | --- | --- |
 | [`ReportingSystem/`](ReportingSystem/) | Backend: Spring Boot 3.5, Java 17, MySQL 8. Mock event generator, Spring Batch statistics job, REST API (`/api/...`). |
-| [`ReportingSystemFront/reporting-ui/`](ReportingSystemFront/reporting-ui/) | Frontend: Angular. Unit ranking, unit detail, units by fault kind, models. |
+| [`ReportingSystemFront/reporting-ui/`](ReportingSystemFront/reporting-ui/) | Frontend: Angular. Scanner and recycler problems first (part problems page, "mark as OK"), then unit ranking by tier, unit detail with events, units by fault kind, models. |
 
 ## Run
 

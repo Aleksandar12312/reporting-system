@@ -21,6 +21,8 @@ describe('App', () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const text = (fixture.nativeElement as HTMLElement).querySelector('nav')?.textContent ?? '';
+    expect(text).toContain('Part problems');
+    expect(text.indexOf('Part problems')).toBeLessThan(text.indexOf('Unit ranking'));
     expect(text).toContain('Unit ranking');
     expect(text).toContain('By fault kind');
     expect(text).toContain('Models');

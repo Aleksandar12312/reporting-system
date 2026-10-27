@@ -1,10 +1,10 @@
 <div class="page-head">
-  <a routerLink="/units" class="back">← Back to list</a>
+  <a href="#" class="back" (click)="goBack($event)">← Back</a>
   <button type="button" (click)="loadAll()">Refresh all</button>
 </div>
 
-<!-- Header / summary -->
-<section class="card">
+<!-- Header: part problems first, then tier and statistics -->
+<section class="card unit-header">
   <div class="unit-title">
     <h1>
       Unit #{{ id() }}
@@ -12,9 +12,6 @@
         <span class="serial">{{ s.serialNumber }}</span>
       }
     </h1>
-    @if (summary(); as s) {
-      <app-tier-badge [tier]="s.tier" />
-    }
   </div>
   @if (dev.enabled()) {
     <div class="request-url">
@@ -24,7 +21,44 @@
   }
 
   @if (summary(); as s) {
+    <!-- Scanner / recycler messages -->
+    <div class="issues" aria-label="Part problems">
+      @if (problems().length > 1) {
+        <div class="issues-head">
+          <button type="button" (click)="openMarkOk('ALL')">Mark all as OK</button>
+        </div>
+      }
+      @for (i of problems(); track i.component) {
+        <div [class]="'issue-box issue-' + i.status" role="status">
+          <div class="issue-text">
+            <strong class="issue-title">{{ issueTitle(i) }}</strong>
+            <div>{{ issueDetail(i) }}</div>
+            @if (i.lastOkAt) {
+              <div class="muted small">
+                Last marked OK on {{ i.lastOkAt | utcDate | date: 'dd.MM.yyyy HH:mm' }} by {{ i.lastOkBy || '—' }}@if (i.lastOkNote) {: "{{ i.lastOkNote }}"}
+              </div>
+            }
+          </div>
+          <button type="button" (click)="openMarkOk(i.component)">Mark {{ partName(i.component) }} as OK</button>
+        </div>
+      } @empty {
+        @if (s.issues?.length) {
+          <div class="parts-ok">
+            <span class="parts-ok-dot" aria-hidden="true"></span>
+            No problem with the scanner or the recycler.
+          </div>
+        }
+      }
+      @for (i of collecting(); track i.component) {
+        <p class="muted small collecting">
+          {{ partLabel(i.component) }} marked OK on {{ i.lastOkAt | utcDate | date: 'dd.MM.yyyy HH:mm' }} by {{ i.lastOkBy || '—' }}.
+          Collecting new data since {{ i.countingSince | utcDate | date: 'dd.MM.yyyy' }}.
+        </p>
+      }
+    </div>
+
     <dl class="stats">
+      <div><dt>Tier</dt><dd><app-tier-badge [tier]="s.tier" /></dd></div>
       <div><dt>Model</dt><dd>{{ s.modelName || '—' }}</dd></div>
       <div>
         <dt>Ratio to model</dt>
@@ -196,6 +230,46 @@
     }
   }
 </section>
+
+<!-- OK history -->
+<details class="card history" (toggle)="onHistoryToggle($event)">
+  <summary><h2>OK history</h2></summary>
+  <app-call-status [call]="history" emptyText="Never marked OK." />
+  @if (history.data(); as rows) {
+    @if (rows.length) {
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>Part</th>
+              <th>By</th>
+              <th>Note</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (h of rows; track h.id) {
+              <tr>
+                <td class="nowrap">{{ h.ackedAt | utcDate | date: 'dd.MM.yyyy HH:mm:ss' }}</td>
+                <td>{{ partLabel(h.component) }}</td>
+                <td>{{ h.ackedBy }}</td>
+                <td class="wrap">{{ h.note || '—' }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</details>
+
+@if (dialogTarget(); as target) {
+  <app-mark-ok-dialog [unitId]="id()" [target]="target" (saved)="onMarkedOk($event)" (closed)="dialogTarget.set(null)" />
+}
+
+@if (toast(); as message) {
+  <div class="toast" role="status" aria-live="polite">{{ message }}</div>
+}
 
 <ng-template #eventTable let-list>
   <div class="table-wrap">

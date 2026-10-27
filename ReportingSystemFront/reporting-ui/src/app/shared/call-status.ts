@@ -10,7 +10,7 @@ import { DevModeService } from '../core/dev-mode.service';
   selector: 'app-call-status',
   template: `
     @if (dev.enabled() && call().url(); as url) {
-      <div class="request-url"><span class="method">GET</span> {{ url }}</div>
+      <div class="request-url"><span class="method">{{ call().method() }}</span> {{ url }}</div>
     }
     @if (call().loading()) {
       <div class="status">Loading…</div>

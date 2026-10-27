@@ -2,9 +2,12 @@ import { HttpClient, HttpParams } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
+  AckRequest,
   DailyFaultRow,
   FaultBreakdown,
   FaultRanking,
+  IssueAck,
+  IssueComponent,
   ModelStats,
   Summary,
   Tier,
@@ -19,10 +22,12 @@ import {
 export const API_ROOT = '/api';
 export const API_BASE = `${API_ROOT}/units`;
 
-/** A prepared GET request: the URL that will be called plus the observable that calls it. */
+/** A prepared request: the URL that will be called plus the observable that calls it. */
 export interface ApiRequest<T> {
   url: string;
   result$: Observable<T>;
+  /** HTTP method, shown in developer mode; GET when left out. */
+  method?: 'GET' | 'POST';
 }
 
 type Params = Record<string, string | number | null | undefined>;
@@ -93,6 +98,31 @@ export class UnitsApiService {
   /** GET /api/units/{unitId}/faults/daily?days= – faults per day (for a future trend chart) */
   unitFaultsDaily(unitId: number | string, days?: number | null): ApiRequest<DailyFaultRow[]> {
     return this.get<DailyFaultRow[]>(`${API_BASE}/${encodeURIComponent(unitId)}/faults/daily`, { days });
+  }
+
+  // ---------- Scanner / recycler problems ----------
+
+  /** POST /api/units/{unitId}/issues/{component}/ack – mark one component as OK */
+  markOk(unitId: number | string, component: IssueComponent, body: AckRequest): ApiRequest<UnitScore> {
+    return this.post<UnitScore>(`${API_BASE}/${encodeURIComponent(unitId)}/issues/${component}/ack`, body);
+  }
+
+  /** POST /api/units/{unitId}/issues/ack – mark every ACTIVE or RECURRING component as OK */
+  markAllOk(unitId: number | string, body: AckRequest): ApiRequest<UnitScore> {
+    return this.post<UnitScore>(`${API_BASE}/${encodeURIComponent(unitId)}/issues/ack`, body);
+  }
+
+  /** GET /api/units/{unitId}/issues/history?limit= – "marked OK" history, newest first */
+  ackHistory(unitId: number | string, limit?: number | null): ApiRequest<IssueAck[]> {
+    return this.get<IssueAck[]>(`${API_BASE}/${encodeURIComponent(unitId)}/issues/history`, { limit });
+  }
+
+  private post<T>(path: string, body: unknown): ApiRequest<T> {
+    return {
+      url: path,
+      method: 'POST',
+      result$: this.http.post<T>(path, body, { headers: { 'Content-Type': 'application/json' } }),
+    };
   }
 
   private get<T>(path: string, params: Params = {}): ApiRequest<T> {

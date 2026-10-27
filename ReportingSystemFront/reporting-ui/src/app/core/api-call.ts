@@ -22,9 +22,16 @@ export class ApiCall<T> {
     inject(DestroyRef).onDestroy(() => this.sub?.unsubscribe());
   }
 
-  run(request: ApiRequest<T>, onError?: (err: unknown) => void): void {
+  /** "GET" or "POST" of the last request (for developer mode). */
+  readonly method = signal<'GET' | 'POST'>('GET');
+
+  run(
+    request: ApiRequest<T>,
+    handlers: { onSuccess?: (value: T) => void; onError?: (err: unknown) => void } = {},
+  ): void {
     this.sub?.unsubscribe();
     this.url.set(request.url);
+    this.method.set(request.method ?? 'GET');
     this.loading.set(true);
     this.error.set(null);
     this.errorStatus.set(null);
@@ -32,15 +39,31 @@ export class ApiCall<T> {
       next: (value) => {
         this.data.set(value);
         this.loading.set(false);
+        handlers.onSuccess?.(value);
       },
       error: (err: unknown) => {
         this.data.set(null);
         this.error.set(toErrorMessage(err));
         this.errorStatus.set(err instanceof HttpErrorResponse ? err.status : 0);
         this.loading.set(false);
-        onError?.(err);
+        handlers.onError?.(err);
       },
     });
+  }
+
+  /** Replaces the data with a value obtained elsewhere (e.g. from a POST answer) and clears errors. */
+  setData(value: T | null): void {
+    this.sub?.unsubscribe();
+    this.loading.set(false);
+    this.error.set(null);
+    this.errorStatus.set(null);
+    this.data.set(value);
+  }
+
+  /** Clears error and data without a request. */
+  reset(): void {
+    this.setData(null);
+    this.url.set(null);
   }
 }
 

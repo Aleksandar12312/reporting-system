@@ -2,7 +2,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { TestBed } from '@angular/core/testing';
 import { provideRouter } from '@angular/router';
 import { of, throwError } from 'rxjs';
-import { FaultBreakdown, UnitEvent } from '../core/models';
+import { ComponentIssue, FaultBreakdown, UnitEvent, UnitScore } from '../core/models';
 import { UnitsApiService } from '../core/units-api.service';
 import { NONE, UnitDetailPage } from './unit-detail-page';
 
@@ -91,5 +91,73 @@ describe('UnitDetailPage', () => {
     await fixture.whenStable();
     const highlighted = [...(fixture.nativeElement as HTMLElement).querySelectorAll('#events .fault')].map((e) => e.textContent?.trim());
     expect(highlighted).toEqual(['JAMMED', 'SOFTWARE_ERROR']);
+  });
+});
+
+describe('UnitDetailPage – scanner / recycler messages', () => {
+  const issue = (partial: Partial<ComponentIssue>): ComponentIssue => ({
+    component: 'SCANNER', status: 'OK', metric: 'REJECT_SHARE', value: 0.05, modelMedian: 0.08, ratio: 0.6, sample: 100,
+    enoughData: true, countingSince: '2026-07-29T10:00:30', lastOkAt: null, lastOkBy: null, lastOkNote: null, ...partial,
+  });
+  const unit = (issues: ComponentIssue[]): UnitScore => ({
+    unitId: 42, serialNumber: 'SN-42', modelName: 'Pro', faults: 10, exposureDays: 90, ratePerDay: 0.1, modelMedianRate: 0.1,
+    ratioToModel: 1, tier: 'OK', topPart: null, topPartFaults: 0, topPartShare: null, scope: null, issues,
+  });
+
+  async function setup(u: UnitScore) {
+    const req = <T>(url: string, value: T) => ({ url, result$: of(value) });
+    const api = {
+      unit: vi.fn(() => req('/api/units/42', u)),
+      scores: vi.fn(() => req('/api/units/scores', [])),
+      unitFaults: vi.fn(() => req('/f', [])),
+      unitEvents: vi.fn(() => req('/e', [])),
+      unitFaultEvents: vi.fn(() => req('/fe', [])),
+      summary: vi.fn(() => req('/api/summary', null)),
+      faultKinds: vi.fn(() => req('/api/fault-kinds', [])),
+      ackHistory: vi.fn(() => req('/h', [])),
+    };
+    TestBed.configureTestingModule({ providers: [provideRouter([]), { provide: UnitsApiService, useValue: api }] });
+    const fixture = TestBed.createComponent(UnitDetailPage);
+    fixture.componentRef.setInput('id', '42');
+    await fixture.whenStable();
+    return { fixture, el: fixture.nativeElement as HTMLElement };
+  }
+
+  it('shows one box per problem and "Mark all as OK" when both are wrong', async () => {
+    const { el } = await setup(
+      unit([
+        issue({ component: 'RECYCLER', metric: 'FAULTS_PER_DAY', status: 'ACTIVE', value: 0.67, modelMedian: 0.15 }),
+        issue({ component: 'SCANNER', status: 'ACTIVE', value: 0.3, modelMedian: 0.08 }),
+      ]),
+    );
+    const titles = [...el.querySelectorAll('.issue-title')].map((e) => e.textContent?.trim());
+    expect(titles).toEqual(['Something is wrong with the scanner.', 'Something is wrong with the recycler.']);
+    expect(el.textContent).toContain('Rejects 30% of notes (similar units: 8%).');
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Mark all as OK')).toBe(true);
+  });
+
+  it('shows no box for status OK and no "Mark all" for a single problem', async () => {
+    const { el } = await setup(unit([issue({ status: 'ACTIVE' }), issue({ component: 'RECYCLER', status: 'OK' })]));
+    expect(el.querySelectorAll('.issue-box').length).toBe(1);
+    expect(el.querySelector('.issue-box')?.classList).toContain('issue-ACTIVE');
+    expect([...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Mark all as OK')).toBe(false);
+  });
+
+  it('uses the RECURRING style', async () => {
+    const { el } = await setup(unit([issue({ status: 'RECURRING', lastOkAt: '2026-10-20T08:15:02', lastOkBy: 'Marko' })]));
+    expect(el.querySelector('.issue-box')?.classList).toContain('issue-RECURRING');
+    expect(el.textContent).toContain('by Marko');
+  });
+
+  it('replaces the header with the POST answer, shows the confirmation and the quiet note', async () => {
+    const { fixture, el } = await setup(unit([issue({ status: 'ACTIVE' })]));
+    const page = fixture.componentInstance;
+    page.openMarkOk('SCANNER');
+    page.onMarkedOk(unit([issue({ status: 'OK', enoughData: false, lastOkAt: '2026-10-27T13:05:11', lastOkBy: 'Marko' })]));
+    await fixture.whenStable();
+    expect(el.querySelectorAll('.issue-box').length).toBe(0);
+    expect(el.querySelector('.toast')?.textContent).toContain('Scanner marked as OK.');
+    expect(el.querySelector('.collecting')?.textContent).toContain('Collecting new data since');
+    expect(el.querySelector('app-mark-ok-dialog')).toBeNull();
   });
 });
