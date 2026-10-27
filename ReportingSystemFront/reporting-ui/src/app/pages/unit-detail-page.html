@@ -1,0 +1,231 @@
+<div class="page-head">
+  <a routerLink="/units" class="back">← Back to list</a>
+  <button type="button" (click)="loadAll()">Refresh all</button>
+</div>
+
+<!-- Header / summary -->
+<section class="card">
+  <div class="unit-title">
+    <h1>
+      Unit #{{ id() }}
+      @if (summary(); as s) {
+        <span class="serial">{{ s.serialNumber }}</span>
+      }
+    </h1>
+    @if (summary(); as s) {
+      <app-tier-badge [tier]="s.tier" />
+    }
+  </div>
+  @if (dev.enabled()) {
+    <div class="request-url">
+      <span class="method">GET</span> {{ unit.url() }}
+      @if (unitFallback.url(); as fb) { → fallback <span class="method">GET</span> {{ fb }} }
+    </div>
+  }
+
+  @if (summary(); as s) {
+    <dl class="stats">
+      <div><dt>Model</dt><dd>{{ s.modelName || '—' }}</dd></div>
+      <div>
+        <dt>Ratio to model</dt>
+        <dd>@if (s.ratioToModel !== null) { {{ s.ratioToModel | number: '1.1-1' }}× } @else { — }</dd>
+      </div>
+      <div><dt>Faults ({{ meta.windowDays() }} days)</dt><dd>{{ s.faults }}</dd></div>
+      <div><dt>Faults / day</dt><dd>{{ s.ratePerDay | number: '1.2-2' }}</dd></div>
+      <div>
+        <dt>Model median</dt>
+        <dd>@if (s.modelMedianRate !== null) { {{ s.modelMedianRate | number: '1.2-2' }} } @else { — }</dd>
+      </div>
+      <div><dt>Days observed</dt><dd>{{ s.exposureDays | number: '1.0-1' }}</dd></div>
+      <div>
+        <dt>Scope</dt>
+        <dd>
+          @switch (s.scope) {
+            @case ('PART') { PART – one component causes most faults }
+            @case ('GENERAL') { GENERAL – faults are spread over the machine }
+            @default { — }
+          }
+        </dd>
+      </div>
+      <div>
+        <dt>Top component</dt>
+        <dd>
+          @if (s.topPart) {
+            {{ s.topPart }} ({{ s.topPartFaults }}@if (s.topPartShare !== null) {, {{ s.topPartShare | percent: '1.0-0' }}})
+          } @else { — }
+        </dd>
+      </div>
+    </dl>
+  } @else if (headerLoading()) {
+    <div class="status">Loading…</div>
+  } @else if (headerError(); as err) {
+    <div class="status error">{{ err }}</div>
+  } @else {
+    <div class="status muted">This unit is not listed.</div>
+  }
+</section>
+
+<!-- Fault breakdown -->
+<section class="card">
+  <div class="section-head">
+    <h2>Faults by component and kind <span class="muted small">(last {{ meta.windowDays() }} days)</span></h2>
+    <button type="button" (click)="loadFaults()">Refresh</button>
+  </div>
+  <app-call-status [call]="faults" [emptyText]="'No faults in the last ' + meta.windowDays() + ' days.'" />
+  @if (faults.data(); as rows) {
+    @if (rows.length) {
+      <div class="toolbar">
+        <label>
+          Search component or fault
+          <input type="search" placeholder="e.g. RC or JAMMED" [(ngModel)]="breakdownSearch" />
+        </label>
+        <span class="muted small">Click a row to see its fault events below.</span>
+      </div>
+      @if (filteredBreakdown().length) {
+        <div class="table-wrap">
+          <table class="clickable">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Fault</th>
+                <th class="num">Count</th>
+                <th class="num">Share</th>
+                <th class="bar-col"></th>
+              </tr>
+            </thead>
+            <tbody>
+              @for (f of filteredBreakdown(); track f.part + f.fault) {
+                <tr (click)="showFaultEventsFor(f)" tabindex="0" (keydown.enter)="showFaultEventsFor(f)">
+                  <td><strong>{{ f.part }}</strong></td>
+                  <td><span class="fault">{{ f.fault }}</span></td>
+                  <td class="num">{{ f.faults }}</td>
+                  <td class="num">{{ f.pctOfUnitFaults | number: '1.1-1' }}%</td>
+                  <td class="bar-col">
+                    <div class="bar"><div class="bar-fill" [style.width.%]="(f.faults / maxFaults()) * 100"></div></div>
+                  </td>
+                </tr>
+              }
+            </tbody>
+          </table>
+        </div>
+      } @else {
+        <div class="status muted">No rows match "{{ breakdownSearch() }}".</div>
+      }
+    }
+  }
+</section>
+
+<!-- Events -->
+<section class="card" id="events">
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" [class.active]="tab() === 'events'" [attr.aria-selected]="tab() === 'events'" (click)="tab.set('events')">
+      All events @if (dev.enabled()) { <code>/events</code> }
+      @if (events.data(); as d) { <span class="count">{{ d.length }}</span> }
+    </button>
+    <button type="button" role="tab" [class.active]="tab() === 'fault-events'" [attr.aria-selected]="tab() === 'fault-events'" (click)="tab.set('fault-events')">
+      Faults only @if (dev.enabled()) { <code>/fault-events</code> }
+      @if (faultEvents.data(); as d) { <span class="count">{{ d.length }}</span> }
+    </button>
+  </div>
+
+  @if (tab() === 'events') {
+    <form class="toolbar" (ngSubmit)="loadEvents()">
+      <label>
+        Newest events to load (1–1000)
+        <input name="eventsLimit" type="number" min="1" max="1000" [(ngModel)]="eventsLimit" (change)="loadEvents()" />
+      </label>
+      <button type="submit" [class.primary]="dev.enabled()" [disabled]="events.loading()">{{ dev.enabled() ? 'Call' : 'Refresh' }}</button>
+    </form>
+    <app-call-status [call]="events" emptyText="No events for this unit." />
+  } @else {
+    <form class="toolbar" (ngSubmit)="loadFaultEvents()">
+      <label>
+        Newest fault events to load (1–1000)
+        <input name="faultEventsLimit" type="number" min="1" max="1000" [(ngModel)]="faultEventsLimit" (change)="loadFaultEvents()" />
+      </label>
+      <button type="submit" [class.primary]="dev.enabled()" [disabled]="faultEvents.loading()">{{ dev.enabled() ? 'Call' : 'Refresh' }}</button>
+    </form>
+    <app-call-status [call]="faultEvents" emptyText="No fault events for this unit." />
+  }
+
+  @if (activeTotal()) {
+    <div class="filters">
+      <label>
+        Search
+        <input type="search" placeholder="ID, component, source, type…" [(ngModel)]="search" />
+      </label>
+      <label>
+        Component
+        <select [(ngModel)]="partFilter">
+          <option value="">All components</option>
+          @for (p of partOptions(); track p) {
+            <option [value]="p">{{ p === NONE ? '(none)' : p }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Source
+        <select [(ngModel)]="sourceFilter">
+          <option value="">All sources</option>
+          @for (s of sourceOptions(); track s) {
+            <option [value]="s">{{ s === NONE ? '(none)' : s }}</option>
+          }
+        </select>
+      </label>
+      <label>
+        Type
+        <select [(ngModel)]="typeFilter">
+          <option value="">All types</option>
+          @for (t of typeOptions(); track t) {
+            <option [value]="t">{{ t === NONE ? '(none)' : t }}</option>
+          }
+        </select>
+      </label>
+      <button type="button" (click)="clearFilters()" [disabled]="!hasFilters()">Clear filters</button>
+    </div>
+
+    <p class="muted small">
+      Showing {{ filteredEvents().length }} of {{ activeTotal() }} loaded events, newest first, in your local time.
+      Filters apply only to the loaded events – raise the number above to search further back.
+    </p>
+
+    @if (filteredEvents().length) {
+      <ng-container *ngTemplateOutlet="eventTable; context: { $implicit: filteredEvents() }" />
+    } @else {
+      <div class="status muted">No events match the current filters.</div>
+    }
+  }
+</section>
+
+<ng-template #eventTable let-list>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Time</th>
+          <th>Type</th>
+          <th>Component</th>
+          <th>Source</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (e of list; track e.id) {
+          <tr>
+            <td class="muted">{{ e.id }}</td>
+            <td class="nowrap">{{ e.eventTime | utcDate | date: 'dd.MM.yyyy HH:mm:ss' }}</td>
+            <td>{{ e.type ?? '—' }}</td>
+            <td>{{ e.part ?? '—' }}</td>
+            <td>
+              @if (isFault(e.source)) {
+                <span class="fault">{{ e.source }}</span>
+              } @else {
+                {{ e.source ?? '—' }}
+              }
+            </td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+</ng-template>

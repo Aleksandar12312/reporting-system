@@ -1,0 +1,148 @@
+<div class="page-head">
+  <h1>Unit ranking</h1>
+</div>
+
+<!-- Dashboard: tier counts from GET /api/summary (hidden while that endpoint is not available) -->
+@if (meta.summary(); as s) {
+  <div class="tier-cards">
+    @for (t of tiers; track t) {
+      <button
+        type="button"
+        class="tier-card"
+        [class]="'tier-card card-' + t"
+        [class.active]="isActiveCard(t)"
+        [attr.aria-pressed]="isActiveCard(t)"
+        (click)="showTier(t)"
+      >
+        <span class="tier-card-count">{{ s.tiers[t] ?? 0 }}</span>
+        <span class="tier-card-label">{{ t }}</span>
+      </button>
+    }
+    <div class="tier-cards-note muted small">
+      {{ s.unitCount }} units · last {{ s.windowDays }} days<br />
+      Click a card to filter the list.
+    </div>
+  </div>
+}
+
+<div class="tabs" role="tablist">
+  <button type="button" role="tab" [class.active]="mode() === 'problematic'" [attr.aria-selected]="mode() === 'problematic'" (click)="setMode('problematic')">
+    Problematic @if (dev.enabled()) { <code>/problematic</code> }
+  </button>
+  <button type="button" role="tab" [class.active]="mode() === 'worst'" [attr.aria-selected]="mode() === 'worst'" (click)="setMode('worst')">
+    Worst @if (dev.enabled()) { <code>/worst</code> }
+  </button>
+  <button type="button" role="tab" [class.active]="mode() === 'scores'" [attr.aria-selected]="mode() === 'scores'" (click)="setMode('scores')">
+    All units @if (dev.enabled()) { <code>/scores</code> }
+  </button>
+</div>
+
+<form class="filters" (ngSubmit)="load()">
+  <label>
+    Search
+    <input name="q" type="search" placeholder="Serial number or ID" [(ngModel)]="search" />
+  </label>
+  <label>
+    Tier
+    <select name="tier" [ngModel]="tier()" (ngModelChange)="onTierChange($event)">
+      <option value="">{{ mode() === 'problematic' ? 'All (WATCH + CRITICAL)' : 'All tiers' }}</option>
+      @for (t of tierOptions(); track t) {
+        <option [value]="t">{{ t }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Model
+    <select name="model" [(ngModel)]="model">
+      <option value="">All models</option>
+      @for (m of modelOptions(); track m) {
+        <option [value]="m">{{ m }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Scope
+    <select name="scope" [(ngModel)]="scope">
+      <option value="">Any scope</option>
+      <option value="PART">PART</option>
+      <option value="GENERAL">GENERAL</option>
+      <option value="NONE">(none)</option>
+    </select>
+  </label>
+  @if (mode() === 'worst') {
+    <label>
+      Show worst (1–1000)
+      <input name="limit" type="number" min="1" max="1000" [(ngModel)]="limit" (change)="load()" />
+    </label>
+  }
+  <button type="submit" [class.primary]="dev.enabled()" [disabled]="call.loading()">
+    {{ dev.enabled() ? 'Call' : 'Refresh' }}
+  </button>
+  <button type="button" (click)="clearViewFilters()" [disabled]="!hasViewFilters()">Clear filters</button>
+</form>
+
+<app-call-status [call]="call" />
+
+@if (call.data(); as units) {
+  @if (units.length) {
+    <p class="muted small">
+      @if (rows().length === units.length) {
+        {{ units.length }} unit(s).
+      } @else {
+        Showing {{ rows().length }} of {{ units.length }} unit(s).
+      }
+      Click a row to open the unit; click a column header to sort.
+    </p>
+    @if (rows().length) {
+      <div class="table-wrap">
+        <table class="clickable sortable">
+          <thead>
+            <tr>
+              <th [attr.aria-sort]="ariaSort('unitId')"><button type="button" (click)="sortBy('unitId')">ID {{ sortMark('unitId') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('serialNumber')"><button type="button" (click)="sortBy('serialNumber')">Serial number {{ sortMark('serialNumber') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('modelName')"><button type="button" (click)="sortBy('modelName')">Model {{ sortMark('modelName') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('tier')"><button type="button" (click)="sortBy('tier')">Tier {{ sortMark('tier') }}</button></th>
+              <th class="num" [attr.aria-sort]="ariaSort('ratioToModel')"><button type="button" (click)="sortBy('ratioToModel')">Ratio {{ sortMark('ratioToModel') }}</button></th>
+              <th class="num" [attr.aria-sort]="ariaSort('faults')"><button type="button" (click)="sortBy('faults')">Faults {{ sortMark('faults') }}</button></th>
+              <th class="num" [attr.aria-sort]="ariaSort('ratePerDay')"><button type="button" (click)="sortBy('ratePerDay')">Faults / day {{ sortMark('ratePerDay') }}</button></th>
+              <th class="num" [attr.aria-sort]="ariaSort('modelMedianRate')"><button type="button" (click)="sortBy('modelMedianRate')">Model median {{ sortMark('modelMedianRate') }}</button></th>
+              <th class="num" [attr.aria-sort]="ariaSort('exposureDays')"><button type="button" (click)="sortBy('exposureDays')">Days {{ sortMark('exposureDays') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('scope')"><button type="button" (click)="sortBy('scope')">Scope {{ sortMark('scope') }}</button></th>
+              <th [attr.aria-sort]="ariaSort('topPart')"><button type="button" (click)="sortBy('topPart')">Top component {{ sortMark('topPart') }}</button></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (u of rows(); track u.unitId) {
+              <tr (click)="openUnit(u.unitId)" tabindex="0" (keydown.enter)="openUnit(u.unitId)">
+                <td>{{ u.unitId }}</td>
+                <td><strong>{{ u.serialNumber || '—' }}</strong></td>
+                <td>{{ u.modelName || '—' }}</td>
+                <td><app-tier-badge [tier]="u.tier" /></td>
+                <td class="num">
+                  @if (u.ratioToModel !== null) { {{ u.ratioToModel | number: '1.1-1' }}× } @else { — }
+                </td>
+                <td class="num">{{ u.faults }}</td>
+                <td class="num">{{ u.ratePerDay | number: '1.2-2' }}</td>
+                <td class="num">
+                  @if (u.modelMedianRate !== null) { {{ u.modelMedianRate | number: '1.2-2' }} } @else { — }
+                </td>
+                <td class="num">{{ u.exposureDays | number: '1.0-1' }}</td>
+                <td>{{ u.scope ?? '—' }}</td>
+                <td>
+                  @if (u.topPart) {
+                    {{ u.topPart }}
+                    <span class="muted">({{ u.topPartFaults }}@if (u.topPartShare !== null) {, {{ u.topPartShare | percent: '1.0-0' }}})</span>
+                  } @else {
+                    —
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    } @else {
+      <div class="status muted">No units match the current filters.</div>
+    }
+  }
+}

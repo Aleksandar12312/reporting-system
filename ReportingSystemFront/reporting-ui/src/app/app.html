@@ -1,0 +1,30 @@
+<header class="topbar">
+  <div class="topbar-inner">
+    <a routerLink="/units" class="brand">Problematic Units</a>
+    <nav>
+      <a routerLink="/units" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }">Unit ranking</a>
+      <a routerLink="/top-by-fault" routerLinkActive="active">By fault kind</a>
+      <a routerLink="/models" routerLinkActive="active">Models</a>
+    </nav>
+
+    @if (meta.summary(); as s) {
+      <span class="freshness" title="Statistics are recomputed by the backend about every 5 minutes">
+        Updated {{ s.computedAt | utcDate | date: 'HH:mm' }}
+      </span>
+    }
+
+    <form class="unit-lookup" (ngSubmit)="openUnit()">
+      <input name="unitId" type="number" min="1" placeholder="Unit ID" aria-label="Unit ID" [(ngModel)]="unitId" />
+      <button type="submit">Open unit</button>
+    </form>
+
+    <label class="dev-toggle" title="Show endpoint names, request URLs and Call buttons">
+      <input type="checkbox" [checked]="dev.enabled()" (change)="dev.toggle()" />
+      Developer mode
+    </label>
+  </div>
+</header>
+
+<main class="container">
+  <router-outlet />
+</main>

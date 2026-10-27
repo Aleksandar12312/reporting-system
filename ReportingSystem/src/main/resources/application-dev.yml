@@ -1,0 +1,64 @@
+spring:
+  datasource:
+    url: jdbc:mysql://localhost:3306/mock_lincstation?rewriteBatchedStatements=true&nullDatabaseMeansCurrent=true
+    username: root
+    password: root
+
+# All generator rules in one place
+mock:
+  enabled: true
+  seed: 42                  # same seed = same data every time
+  unit-count: 200
+  backfill-days: 90         # history created on first start, then new events every 5 minutes
+  # Every event comes from the bill recycler (event.placeholder = RC), with a name from the recycler event list.
+  transactions-per-day: 10  # customer transactions per unit per day (a deposit is ~4 events, a payout 2)
+  status-events-per-day: 2  # warnings and state changes per unit per day (cashbox removed, reset, note held ...)
+
+  # Faults per day for a NORMAL unit of each model.
+  # Units are assigned to models in rotation (1st model, 2nd model, 3rd model, 1st ...).
+  models:
+    - name: Duo
+      faults-per-day: 0.10
+    - name: Pro
+      faults-per-day: 0.15
+    - name: Recycler Max
+      faults-per-day: 0.30
+
+  # How many units get a special behaviour. The rest are NORMAL.
+  # Multipliers on the model rate: bad x8, bad-one-component x6, borderline x2.5, new-few-faults x2, silent = no events.
+  planted:
+    bad: 15
+    bad-one-component: 10
+    borderline: 15
+    new-few-faults: 5
+    silent: 5
+
+# Thresholds of the REST API (tier and scope). The window, baseline and fault sources are in the stats: block below.
+ranking:
+  min-faults: 3            # fewer faults than this = always OK
+  watch-ratio: 2.0         # rate >= 2 x model median = WATCH
+  critical-ratio: 4.0      # rate >= 4 x model median = CRITICAL
+  part-min-faults: 8       # PART/GENERAL is decided only from this many faults
+  part-share: 0.5          # one component with >= 50% of the faults = PART
+
+# Statistics tables (unit_fault_daily, unit_stats, model_stats), kept up to date by the Spring Batch job
+stats:
+  enabled: true
+  refresh-cron: "30 */5 * * * *"   # UTC; 30 seconds after every 5-minute mock tick
+  slice-size: 500000               # event ids per transaction while counting faults
+  chunk-size: 500                  # units per transaction while writing unit_stats
+  window-days: 90                  # look back at most this many days (shorter for new units)
+  baseline-min-days: 14            # a unit needs this much history to count in its model's median
+  fault-sources:                   # every FAULT event of the recycler event list (event_source.category = 'FAULT')
+    - ERROR_DURING_PAYOUT
+    - COIN_MECH_ERROR
+    - COIN_MECH_JAMMED
+    - PAYOUT_OUT_OF_SERVICE
+    - JAMMED
+    - TIME_OUT
+    - INCOMPLETE_PAYOUT
+    - INCOMPLETE_FLOAT
+    - UNSAFE_NOTE_JAM
+    - SAFE_NOTE_JAM
+    - SOFTWARE_ERROR
+    - FAIL

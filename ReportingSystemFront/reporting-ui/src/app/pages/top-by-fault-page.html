@@ -1,0 +1,58 @@
+<h1>Units by fault kind</h1>
+
+<form class="filters" (ngSubmit)="load()">
+  <label>
+    Fault kind
+    <select name="fault" [ngModel]="fault()" (ngModelChange)="onFaultChange($event)">
+      @for (f of meta.faultKinds(); track f) {
+        <option [value]="f">{{ f }}</option>
+      }
+      @if (!meta.faultKindSet().has(fault())) {
+        <option [value]="fault()">{{ fault() }}</option>
+      }
+    </select>
+  </label>
+  <label>
+    Show top (1–1000)
+    <input name="limit" type="number" min="1" max="1000" [(ngModel)]="limit" (change)="load()" />
+  </label>
+  <button type="submit" [class.primary]="dev.enabled()" [disabled]="call.loading()">{{ dev.enabled() ? 'Call' : 'Refresh' }}</button>
+</form>
+
+<app-call-status [call]="call" [emptyText]="'No unit had this fault in the last ' + meta.windowDays() + ' days.'" />
+
+@if (call.data(); as rows) {
+  @if (rows.length) {
+    <p class="muted small">"Faults" counts only the selected fault kind. Click a row to open the unit.</p>
+    <div class="table-wrap">
+      <table class="clickable">
+        <thead>
+          <tr>
+            <th class="num">#</th>
+            <th>ID</th>
+            <th>Serial number</th>
+            <th>Model</th>
+            <th>Fault</th>
+            <th class="num">Faults</th>
+            <th class="num">Faults / day</th>
+            <th class="num">Days</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (r of rows; track r.unitId; let i = $index) {
+            <tr (click)="openUnit(r.unitId)" tabindex="0" (keydown.enter)="openUnit(r.unitId)">
+              <td class="num muted">{{ i + 1 }}</td>
+              <td>{{ r.unitId }}</td>
+              <td><strong>{{ r.serialNumber || '—' }}</strong></td>
+              <td>{{ r.modelName || '—' }}</td>
+              <td><span class="fault">{{ r.fault }}</span></td>
+              <td class="num">{{ r.faults }}</td>
+              <td class="num">{{ r.ratePerDay | number: '1.2-2' }}</td>
+              <td class="num">{{ r.exposureDays | number: '1.0-1' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}

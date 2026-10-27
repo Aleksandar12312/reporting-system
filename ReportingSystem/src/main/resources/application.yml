@@ -1,0 +1,11 @@
+spring:
+  application:
+    name: problematic-units
+  batch:
+    job:
+      enabled: false        # never start jobs on startup by itself; StatsJobRunner starts the stats job
+    jdbc:
+      initialize-schema: always   # create the BATCH_ metadata tables in the database if they are missing
+  profiles:
+    # Dev by default so the mock generator starts. Override with --spring.profiles.active=...
+    default: dev

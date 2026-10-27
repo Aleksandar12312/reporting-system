@@ -1,0 +1,42 @@
+<div class="page-head">
+  <h1>Models</h1>
+  <button type="button" (click)="load()" [disabled]="call.loading()">{{ dev.enabled() ? 'Call' : 'Refresh' }}</button>
+</div>
+
+<app-call-status [call]="call" emptyText="No models." />
+
+@if (call.data(); as models) {
+  @if (models.length) {
+    <p class="muted small">Click a row to see that model's units in the ranking.</p>
+    <div class="table-wrap">
+      <table class="clickable">
+        <thead>
+          <tr>
+            <th>Model</th>
+            <th class="num">Units</th>
+            <th class="num">Baseline units</th>
+            <th class="num">Faults in window</th>
+            <th class="num">Median faults / day</th>
+            <th class="num">Mean faults / day</th>
+            <th class="num">Window (days)</th>
+            <th>Last updated</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (m of models; track m.unitTypeId) {
+            <tr (click)="openModel(m)" tabindex="0" (keydown.enter)="openModel(m)">
+              <td><strong>{{ m.modelName }}</strong></td>
+              <td class="num">{{ m.unitCount }}</td>
+              <td class="num">{{ m.baselineUnitCount }}</td>
+              <td class="num">{{ m.faultsInWindow }}</td>
+              <td class="num">@if (m.medianRatePerDay !== null) { {{ m.medianRatePerDay | number: '1.2-2' }} } @else { — }</td>
+              <td class="num">@if (m.meanRatePerDay !== null) { {{ m.meanRatePerDay | number: '1.2-2' }} } @else { — }</td>
+              <td class="num">{{ m.windowDays }}</td>
+              <td class="nowrap">{{ m.computedAt | utcDate | date: 'dd.MM.yyyy HH:mm' }}</td>
+            </tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+}
