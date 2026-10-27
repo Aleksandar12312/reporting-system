@@ -1,0 +1,263 @@
+<div class="help">
+  <aside class="help-toc" aria-label="Contents">
+    <strong>Contents</strong>
+    <ol>
+      @for (s of sections; track s.id) {
+        <li><a routerLink="/help" [fragment]="s.id">{{ s.title }}</a></li>
+      }
+    </ol>
+  </aside>
+
+  <article class="help-body">
+    <h1>Help</h1>
+    <p class="lead">
+      Everything you need to find your way through the Reporting System: what it shows, what the colours and
+      numbers mean, how to mark a part as OK, and what to do when a message appears.
+    </p>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="overview">
+      <h2>What the Reporting System does</h2>
+      <p>
+        The Reporting System watches bill-recycler machines (<strong>units</strong>) and shows which ones need
+        attention. It compares every unit with other units of the <strong>same model</strong>, so a unit is only
+        flagged when it does clearly worse than machines like it.
+      </p>
+      <p>It answers two questions, in this order:</p>
+      <ol>
+        <li><strong>Is something wrong with a part?</strong> The <em>scanner</em> (reads the notes) or the <em>recycler</em> (stores and pays out notes).</li>
+        <li><strong>How does the unit do overall?</strong> The <em>tier</em>: how often it fails compared with its model.</li>
+      </ol>
+      <p>
+        The numbers come from the backend and are recalculated about <strong>every 5 minutes</strong>. The time of the
+        last calculation is shown at the top right ("Updated hh:mm"). The window for the statistics is the
+        last <strong>{{ meta.windowDays() }} days</strong>.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="start">
+      <h2>Where to start</h2>
+      <ol>
+        <li>Open <a routerLink="/parts">Part problems</a> (the start page). Choose <em>Scanner</em> or <em>Recycler</em>; the worst units are at the top.</li>
+        <li>Click a unit to open it. Read the message at the top: what is wrong and how it compares with similar units.</li>
+        <li>After the part was cleaned, checked or repaired, press <em>Mark scanner as OK</em> / <em>Mark recycler as OK</em>.</li>
+        <li>For an overall view, use <a routerLink="/units">Unit ranking</a>: part problems first, then the tier.</li>
+      </ol>
+      <p>To jump to a known unit, type its ID in the <em>Unit ID</em> box at the top and press <em>Open unit</em>.</p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="part-problems">
+      <h2>Scanner and recycler problems</h2>
+      <p>For every unit the backend checks both parts and gives each one a status:</p>
+      <table class="help-table">
+        <thead>
+          <tr><th>Status</th><th>Shown as</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><span class="chip chip-ACTIVE">Active</span></td>
+            <td>orange box on the unit page</td>
+            <td>Something is wrong with the part now.</td>
+          </tr>
+          <tr>
+            <td><span class="chip chip-RECURRING">Recurring</span></td>
+            <td>red box, "…again, N days after it was marked OK"</td>
+            <td>The problem came back within 14 days after someone marked the part as OK – the last fix did not last.</td>
+          </tr>
+          <tr>
+            <td><span class="muted">OK</span></td>
+            <td>no box</td>
+            <td>Nothing to show for this part.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>The scanner</h3>
+      <p>
+        Measured as the share of <strong>rejected notes</strong> (notes the scanner could not accept, out of all notes it read).
+        Example: <em>"Rejects 30% of notes (similar units: 8%)."</em>
+      </p>
+      <p class="help-hint">A scanner with many rejects <strong>may need cleaning</strong>.</p>
+
+      <h3>The recycler</h3>
+      <p>
+        Measured as <strong>recycler faults per day</strong>. Example: <em>"0.67 faults per day (similar units: 0.15)."</em>
+      </p>
+      <p class="help-hint">A recycler with many faults <strong>may need to be checked</strong>.</p>
+
+      <p>
+        The suggestions are hints, not instructions: the system only sees the numbers. The backend decides the status;
+        the page never sets its own limits.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="mark-ok">
+      <h2>Marking a part as OK</h2>
+      <ol>
+        <li>On the unit page press <em>Mark scanner as OK</em>, <em>Mark recycler as OK</em>, or <em>Mark all as OK</em> (shown when both parts have a problem).</li>
+        <li>Enter your <strong>name</strong> (required, up to 100 characters) and, if you like, a <strong>note</strong> such as "scanner cleaned" (up to 500 characters). Your name is remembered for next time.</li>
+        <li>Press <em>Mark as OK</em>. The box disappears at once and a short confirmation appears.</li>
+      </ol>
+      <p>What happens next:</p>
+      <ul>
+        <li>The backend <strong>starts counting that part again from now</strong>. Old data no longer counts, so the message does not come back because of the past.</li>
+        <li>While there is too little new data, the unit page shows a grey line: <em>"Scanner marked OK on … by …. Collecting new data since …"</em>. This is expected, not an error.</li>
+        <li>If the part does badly again within 14 days, it becomes <span class="chip chip-RECURRING">Recurring</span>.</li>
+        <li>Every "marked OK" is kept in <em>OK history</em> at the bottom of the unit page (time, part, name, note).</li>
+      </ul>
+      <p>Pressing it twice is harmless, but it restarts the counting again.</p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="tiers">
+      <h2>Tiers</h2>
+      <p>The tier is the overall picture of the unit and is shown <strong>after</strong> the part problems.</p>
+      <table class="help-table">
+        <thead>
+          <tr><th>Tier</th><th>Meaning</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><app-tier-badge tier="CRITICAL" /></td><td>Fails at least 4 times as often as a typical unit of its model.</td></tr>
+          <tr><td><app-tier-badge tier="WATCH" /></td><td>Fails at least 2 times as often.</td></tr>
+          <tr><td><app-tier-badge tier="OK" /></td><td>Normal, or too few faults (fewer than 3) to judge.</td></tr>
+          <tr><td><app-tier-badge tier="NO_BASELINE" /></td><td>Cannot be compared yet: there is no typical value for its model.</td></tr>
+        </tbody>
+      </table>
+      <p>
+        <strong>Scope</strong> (only for WATCH and CRITICAL units with at least 8 faults):
+        <em>PART</em> – one component causes at least half of the faults (see <em>Top component</em>);
+        <em>GENERAL</em> – the faults are spread over the whole machine.
+      </p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="numbers">
+      <h2>Numbers and terms</h2>
+      <dl class="help-terms">
+        <dt>Similar units / Model median</dt>
+        <dd>The value of a typical unit of the same model (the middle value). "—" means it is not known yet.</dd>
+        <dt>Ratio</dt>
+        <dd>How many times worse than a typical unit of the same model. <em>3.0×</em> = three times as many faults.</dd>
+        <dt>Faults / day</dt>
+        <dd>Faults divided by the days the unit was observed.</dd>
+        <dt>Days / Days observed</dt>
+        <dd>How many days of the window the unit was watched (shorter for new units).</dd>
+        <dt>Notes read / Faults counted</dt>
+        <dd>How much data a part decision is based on, since <em>Counting since</em>.</dd>
+        <dt>Counting since</dt>
+        <dd>Start of the data used for a part: the start of the window, or the day after it was last marked OK.</dd>
+        <dt>Top component</dt>
+        <dd>The component with the most faults, with its count and share, e.g. <em>RC (30, 73%)</em>.</dd>
+        <dt>Component, Source, Type (events)</dt>
+        <dd>Where on the machine an event happened, what the event was (e.g. JAMMED), and its category.</dd>
+        <dt>Times</dt>
+        <dd>All times are shown in your local time.</dd>
+      </dl>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="pages">
+      <h2>Pages</h2>
+      <dl class="help-terms">
+        <dt><a routerLink="/parts">Part problems</a></dt>
+        <dd>
+          Units with a scanner or recycler problem, worst first (recurring, then active, then the highest ratio).
+          <em>Show all units</em> also lists units without a problem. Filter by serial number, ID or model.
+        </dd>
+        <dt><a routerLink="/units">Unit ranking</a></dt>
+        <dd>
+          All units with part problems first, then by tier. Cards at the top filter the list. Tabs:
+          <em>Problematic</em> (WATCH and CRITICAL), <em>Worst</em> (the N worst), <em>All units</em>.
+          Click a column header to sort (click again to reverse, a third time to go back to the default order).
+        </dd>
+        <dt>Unit page</dt>
+        <dd>
+          Part messages and Mark as OK, then tier and statistics, faults by component and kind (click a row to see
+          those fault events), the newest events with search and filters, and the OK history.
+          Filters work on the loaded events only – raise "Newest events to load" (up to 1000) to look further back.
+        </dd>
+        <dt><a routerLink="/top-by-fault">By fault kind</a></dt>
+        <dd>The units with the most faults of one kind in the last {{ meta.windowDays() }} days.</dd>
+        <dt><a routerLink="/models">Models</a></dt>
+        <dd>Per model: number of units, faults, and typical (median) and average faults per day. Click a model to see its units.</dd>
+        <dt>Developer mode (top right)</dt>
+        <dd>Shows the backend address behind each list. Useful when reporting a problem; not needed for daily work.</dd>
+      </dl>
+      <p>Every list keeps its filters in the address bar, so you can bookmark a view or send the link to a colleague.</p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="faults">
+      <h2>Fault kinds</h2>
+      <p>These event sources count as faults (they are highlighted in red in the event lists):</p>
+      <ul class="fault-list">
+        @for (f of meta.faultKinds(); track f) {
+          <li><span class="fault">{{ f }}</span></li>
+        }
+      </ul>
+      <p class="muted small">All other events (warnings, status changes, operations, commands) are shown but do not count as faults.</p>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="errors">
+      <h2>Error messages</h2>
+      <p>Errors appear in a red box where the data would be. The rest of the page keeps working.</p>
+      <div class="table-wrap">
+        <table class="help-table errors">
+          <thead>
+            <tr><th>Message</th><th>What it means</th><th>What to do</th></tr>
+          </thead>
+          <tbody>
+            @for (e of errors; track e.message) {
+              <tr>
+                <td><span class="status error inline">{{ e.message }}</span></td>
+                <td>{{ e.meaning }}</td>
+                <td>{{ e.action }}</td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="empty">
+      <h2>Empty lists and missing parts</h2>
+      <p>A grey note means "nothing to show", not an error:</p>
+      <dl class="help-terms">
+        <dt>"No unit has a scanner problem right now."</dt>
+        <dd>Good news – no unit is flagged for this part. Use <em>Show all units</em> to see all of them.</dd>
+        <dt>"This unit is not listed."</dt>
+        <dd>The backend has no statistics for this unit ID (unknown or too new).</dd>
+        <dt>"No faults in the last {{ meta.windowDays() }} days." / "No events for this unit."</dt>
+        <dd>The unit had no such events.</dd>
+        <dt>"No units match the current filters." / "No events match the current filters."</dt>
+        <dd>The filters hide everything. Press <em>Clear filters</em>.</dd>
+        <dt>"Never marked OK."</dt>
+        <dd>Nobody has marked a part of this unit as OK yet.</dd>
+        <dt>No cards at the top and no "Updated" time</dt>
+        <dd>The backend does not offer the summary yet. The lists still work.</dd>
+      </dl>
+    </section>
+
+    <!-- ------------------------------------------------------------ -->
+    <section id="troubleshooting">
+      <h2>Troubleshooting</h2>
+      <dl class="help-terms">
+        <dt>Every page says the backend is not reachable</dt>
+        <dd>Start the backend first (port 8080), then the frontend with <code>start-frontend.bat</code> (or <code>npm start</code>), and open http://localhost:4200.</dd>
+        <dt>The numbers look old</dt>
+        <dd>They are recalculated about every 5 minutes. Press <em>Refresh</em> after that; check "Updated" at the top.</dd>
+        <dt>I marked a part as OK but nothing seems to happen later</dt>
+        <dd>Right after marking, the system collects new data first. A new message appears only if the part does badly again.</dd>
+        <dt>A unit I expect is missing from Part problems</dt>
+        <dd>Only units with a current problem are listed. Turn on <em>Show all units</em>, or check the filters.</dd>
+        <dt>Reporting a problem</dt>
+        <dd>Turn on Developer mode, take a screenshot that shows the address and the message, and note the time.</dd>
+      </dl>
+    </section>
+  </article>
+</div>

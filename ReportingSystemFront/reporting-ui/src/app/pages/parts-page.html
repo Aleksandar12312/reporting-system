@@ -22,6 +22,13 @@
   }
 </div>
 
+@if (problemCounts()[part()] > 0) {
+  <p class="part-hint">
+    {{ partHint(part()) }}
+    <a routerLink="/help" fragment="part-problems" class="small">How is this decided?</a>
+  </p>
+}
+
 <div class="filters">
   <label>
     Search

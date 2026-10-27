@@ -133,6 +133,8 @@ describe('UnitDetailPage – scanner / recycler messages', () => {
     const titles = [...el.querySelectorAll('.issue-title')].map((e) => e.textContent?.trim());
     expect(titles).toEqual(['Something is wrong with the scanner.', 'Something is wrong with the recycler.']);
     expect(el.textContent).toContain('Rejects 30% of notes (similar units: 8%).');
+    const hints = [...el.querySelectorAll('.issue-hint')].map((e) => e.textContent?.trim());
+    expect(hints).toEqual(['The scanner may need cleaning.', 'The recycler may need to be checked.']);
     expect([...el.querySelectorAll('button')].some((b) => b.textContent?.trim() === 'Mark all as OK')).toBe(true);
   });
 

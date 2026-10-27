@@ -5,9 +5,11 @@ import {
   hasProblem,
   isCollecting,
   issueDetail,
+  issueHint,
   issueOf,
   issueTitle,
   markedOkMessage,
+  partHint,
   partsSeverity,
   problemsOf,
   sortByPart,
@@ -131,5 +133,15 @@ describe('issue helpers', () => {
     expect(statusLabel(issue({ status: 'RECURRING' }))).toBe('Recurring');
     expect(statusLabel(issue({ status: 'ACTIVE' }))).toBe('Active');
     expect(statusLabel(null)).toBe('—');
+  });
+
+  it('suggests cleaning the scanner and checking the recycler', () => {
+    expect(issueHint(issue({ status: 'ACTIVE' }))).toBe('The scanner may need cleaning.');
+    expect(issueHint(issue({ component: 'RECYCLER', status: 'ACTIVE' }))).toBe('The recycler may need to be checked.');
+    expect(issueHint(issue({ status: 'RECURRING' }))).toBe(
+      'The scanner may need cleaning. The problem came back after the last fix.',
+    );
+    expect(partHint('SCANNER')).toContain('scanner cleaned');
+    expect(partHint('RECYCLER')).toContain('recycler checked');
   });
 });

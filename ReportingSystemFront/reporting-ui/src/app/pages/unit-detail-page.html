@@ -23,9 +23,12 @@
   @if (summary(); as s) {
     <!-- Scanner / recycler messages -->
     <div class="issues" aria-label="Part problems">
-      @if (problems().length > 1) {
+      @if (problems().length) {
         <div class="issues-head">
-          <button type="button" (click)="openMarkOk('ALL')">Mark all as OK</button>
+          <a routerLink="/help" fragment="part-problems" class="small">What do these messages mean?</a>
+          @if (problems().length > 1) {
+            <button type="button" (click)="openMarkOk('ALL')">Mark all as OK</button>
+          }
         </div>
       }
       @for (i of problems(); track i.component) {
@@ -33,6 +36,7 @@
           <div class="issue-text">
             <strong class="issue-title">{{ issueTitle(i) }}</strong>
             <div>{{ issueDetail(i) }}</div>
+            <div class="issue-hint">{{ issueHint(i) }}</div>
             @if (i.lastOkAt) {
               <div class="muted small">
                 Last marked OK on {{ i.lastOkAt | utcDate | date: 'dd.MM.yyyy HH:mm' }} by {{ i.lastOkBy || '—' }}@if (i.lastOkNote) {: "{{ i.lastOkNote }}"}

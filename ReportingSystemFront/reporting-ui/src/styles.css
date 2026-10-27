@@ -545,6 +545,8 @@ table.sortable th.num button {
 .issues-head {
   display: flex;
   justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 8px;
 }
 
@@ -898,4 +900,145 @@ td.secondary-col {
   height: 8px;
   border-radius: 50%;
   background: var(--ok);
+}
+
+/* ---------- Hints ---------- */
+.issue-hint {
+  margin-top: 2px;
+  font-weight: 600;
+}
+
+.issue-hint::before {
+  content: '→ ';
+}
+
+.part-hint {
+  margin: -4px 0 12px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--watch-bg);
+  color: var(--watch);
+  font-weight: 600;
+}
+
+.part-hint a {
+  margin-left: 8px;
+  font-weight: 400;
+}
+
+/* ---------- Help page ---------- */
+.help {
+  display: grid;
+  grid-template-columns: 230px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+
+.help-toc {
+  position: sticky;
+  top: 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 13px;
+}
+
+.help-toc ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+}
+
+.help-toc li {
+  margin: 4px 0;
+}
+
+.help-toc a {
+  text-decoration: none;
+}
+
+.help-body {
+  max-width: 860px;
+  line-height: 1.55;
+}
+
+.help-body .lead {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.help-body section {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 16px;
+  scroll-margin-top: 16px;
+}
+
+.help-body h2 {
+  font-size: 18px;
+  margin-bottom: 8px;
+}
+
+.help-body h3 {
+  font-size: 15px;
+  margin: 16px 0 4px;
+}
+
+.help-table {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  margin: 8px 0;
+}
+
+.help-table td {
+  white-space: normal;
+  vertical-align: top;
+}
+
+.help-table.errors td:first-child {
+  min-width: 260px;
+}
+
+.status.inline {
+  display: inline-block;
+  margin: 0;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.help-terms dt {
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.help-terms dd {
+  margin: 2px 0 0 0;
+  color: var(--text);
+}
+
+.help-hint {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: var(--watch-bg);
+  color: var(--watch);
+}
+
+.fault-list {
+  columns: 3;
+  padding-left: 20px;
+}
+
+@media (max-width: 900px) {
+  .help {
+    grid-template-columns: 1fr;
+  }
+  .help-toc {
+    position: static;
+  }
+  .fault-list {
+    columns: 2;
+  }
 }

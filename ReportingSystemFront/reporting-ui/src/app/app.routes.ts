@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { HelpPage } from './pages/help-page';
 import { ModelsPage } from './pages/models-page';
 import { PartsPage } from './pages/parts-page';
 import { ScoresPage } from './pages/scores-page';
@@ -12,5 +13,6 @@ export const routes: Routes = [
   { path: 'units/:id', component: UnitDetailPage, title: 'Unit' },
   { path: 'top-by-fault', component: TopByFaultPage, title: 'By fault kind' },
   { path: 'models', component: ModelsPage, title: 'Models' },
+  { path: 'help', component: HelpPage, title: 'Help' },
   { path: '**', redirectTo: 'parts' },
 ];

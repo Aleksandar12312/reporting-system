@@ -64,6 +64,23 @@ export function issueDetail(issue: ComponentIssue): string {
   return scanner ? `Rejects ${fmt(issue.value)} of notes${similar}.` : `${fmt(issue.value)} faults per day${similar}.`;
 }
 
+/**
+ * Suggestion shown with a problem: "may need", never a repair procedure.
+ * A recurring problem adds that the last fix did not last.
+ */
+export function issueHint(issue: ComponentIssue): string {
+  const base =
+    issue.component === 'SCANNER' ? 'The scanner may need cleaning.' : 'The recycler may need to be checked.';
+  return issue.status === 'RECURRING' ? `${base} The problem came back after the last fix.` : base;
+}
+
+/** Same suggestion for a list of units with a problem on one part. */
+export function partHint(component: IssueComponent): string {
+  return component === 'SCANNER'
+    ? 'Units listed here may need their scanner cleaned.'
+    : 'Units listed here may need their recycler checked.';
+}
+
 /** Status OK, marked OK before, and too little new data yet: show the quiet "collecting" note. */
 export function isCollecting(issue: ComponentIssue | null | undefined): issue is ComponentIssue {
   return !!issue && issue.status === 'OK' && !!issue.lastOkAt && !issue.enoughData;

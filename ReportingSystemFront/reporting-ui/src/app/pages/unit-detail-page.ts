@@ -1,7 +1,7 @@
 import { DatePipe, DecimalPipe, Location, NgTemplateOutlet, PercentPipe } from '@angular/common';
 import { Component, DestroyRef, computed, effect, inject, input, signal, untracked } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { Router } from '@angular/router';
+import { Router, RouterLink } from '@angular/router';
 import { ApiCall } from '../core/api-call';
 import { AppMetaService } from '../core/app-meta.service';
 import { DevModeService } from '../core/dev-mode.service';
@@ -12,6 +12,7 @@ import {
   AckTarget,
   isCollecting,
   issueDetail,
+  issueHint,
   issueOf,
   issueTitle,
   markedOkMessage,
@@ -35,7 +36,7 @@ export const NONE = '__none__';
 @Component({
   selector: 'app-unit-detail-page',
   imports: [
-    FormsModule, NgTemplateOutlet, DatePipe, DecimalPipe, PercentPipe,
+    FormsModule, NgTemplateOutlet, RouterLink, DatePipe, DecimalPipe, PercentPipe,
     UtcDatePipe, TierBadge, CallStatus, MarkOkDialog,
   ],
   templateUrl: './unit-detail-page.html',
@@ -66,6 +67,7 @@ export class UnitDetailPage {
   // ---------- Scanner / recycler problems ----------
   protected readonly issueTitle = issueTitle;
   protected readonly issueDetail = issueDetail;
+  protected readonly issueHint = issueHint;
   protected readonly partLabel = partLabel;
   protected readonly partName = partName;
 

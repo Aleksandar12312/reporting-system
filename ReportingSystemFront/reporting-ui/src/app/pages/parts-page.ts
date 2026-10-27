@@ -1,13 +1,13 @@
 import { DatePipe, DecimalPipe } from '@angular/common';
 import { Component, computed, effect, inject, signal } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { ActivatedRoute, Router } from '@angular/router';
+import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import { ApiCall } from '../core/api-call';
 import { DevModeService } from '../core/dev-mode.service';
 import { ISSUE_COMPONENTS, IssueComponent, UnitScore } from '../core/models';
 import { UnitsApiService } from '../core/units-api.service';
 import { CallStatus } from '../shared/call-status';
-import { isProblem, issueOf, partLabel, sortByPart, statusLabel } from '../shared/issues';
+import { isProblem, issueOf, partHint, partLabel, sortByPart, statusLabel } from '../shared/issues';
 import { TierBadge } from '../shared/tier-badge';
 import { UtcDatePipe } from '../shared/utc-date.pipe';
 
@@ -19,7 +19,7 @@ const DEFAULT_PART: IssueComponent = 'SCANNER';
  */
 @Component({
   selector: 'app-parts-page',
-  imports: [FormsModule, DecimalPipe, DatePipe, UtcDatePipe, TierBadge, CallStatus],
+  imports: [FormsModule, RouterLink, DecimalPipe, DatePipe, UtcDatePipe, TierBadge, CallStatus],
   templateUrl: './parts-page.html',
 })
 export class PartsPage {
@@ -29,6 +29,7 @@ export class PartsPage {
 
   protected readonly components = ISSUE_COMPONENTS;
   protected readonly partLabel = partLabel;
+  protected readonly partHint = partHint;
   protected readonly statusLabel = statusLabel;
   protected readonly issueOf = issueOf;
 
