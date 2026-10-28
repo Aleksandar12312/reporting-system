@@ -34,7 +34,7 @@ Re-run `schema.sql` and `schema_mock_key.sql`, then start the app again. `schema
 tables; the app creates and fills them again. To keep an existing database instead, run
 `db/migrate_recycler_events.sql` (widens the text columns, adds `event_source`, deletes the old non-recycler events).
 An existing database from before the column `event_source.part` needs `db/migrate_event_parts.sql` once (adds the
-column and fills it for SCANNER and RECYCLER); the app tells you in the log when it is missing.
+column and gives every event SCANNER or RECYCLER); the app tells you in the log when it is missing.
 Set `mock.enabled: false` to switch the whole generator off.
 
 ## REST API (package `api`)
@@ -90,7 +90,7 @@ message back; the model medians always use every unit's whole window.
 The tier of the fault rate is raised to at least WATCH while a unit has a SCANNER or RECYCLER message that is
 ACTIVE or RECURRING (OK and NO_BASELINE become WATCH; WATCH and CRITICAL stay). So such a unit is in
 `/problematic`, in the WATCH count of `/summary` and in `?tier=WATCH`. Rate, ratio and scope stay those of the faults.
-`topPart` and the part of `/faults` and the event lists are `event_source.part` (`OTHER` = not assigned to a component yet; the column is never NULL).
+`topPart` and the part of `/faults` and the event lists are `event_source.part` (always SCANNER or RECYCLER for now; the column is never NULL).
 Marking the component as OK brings the tier of the fault rate back.
 
 Tier and scope are decided by `RankingEngine` from the `ranking:` block of `application-dev.yml`
