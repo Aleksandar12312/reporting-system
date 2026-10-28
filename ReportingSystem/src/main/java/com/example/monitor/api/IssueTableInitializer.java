@@ -8,7 +8,7 @@ import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
 /**
- * On start: creates the table unit_issue_ack if it is missing (db/schema_issues.sql) and checks
+ * On start: creates the tables unit_issue_ack and unit_reset if they are missing (db/schema_issues.sql) and checks
  * ranking.components against event_source, so a wrong event name is in the log right away.
  */
 @Component
@@ -30,7 +30,7 @@ public class IssueTableInitializer implements ApplicationRunner {
             repository.createTableIfMissing();
         } catch (DataAccessException e) {
             // The API then answers 503 for these calls; everything else keeps working
-            log.error("Could not create table unit_issue_ack", e);
+            log.error("Could not create tables unit_issue_ack / unit_reset", e);
         }
         try {
             catalog.components().forEach(c -> log.info("Component {}: {} work={} problems={}",

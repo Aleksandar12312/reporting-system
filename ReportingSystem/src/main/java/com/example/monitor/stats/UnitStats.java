@@ -8,7 +8,7 @@ import java.time.LocalDateTime;
  *
  * @param unitId         the unit
  * @param unitTypeId     its model
- * @param windowStart    start of the observed window: now - window-days, or the creation date if the unit is younger
+ * @param windowStart    start of the observed window: now - window-days, or the creation date / the day after the newest reset if that is later
  * @param exposureDays   length of the window in days (with fractions)
  * @param faultsInWindow faults in the window
  * @param ratePerDay     faultsInWindow / exposureDays; 0 when the window is empty

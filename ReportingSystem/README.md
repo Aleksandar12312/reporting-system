@@ -64,6 +64,11 @@ the event lists are read live from `event`.
   now (400 for an unknown component)
 - `POST /api/units/{unitId}/issues/ack`: the same for every component that has a problem now
 - `/api/units/{unitId}/issues/history?limit=50`: every "marked OK" of a unit, newest first
+- `POST /api/units/{unitId}/reset` with `{"by": "Marko", "note": "serviced"}`: reset the unit (e.g. after a service).
+  From the start of the next day it is counted as if it were new: tier and every component start from zero, and it
+  stays out of its model's median until it has `baseline-min-days` of history again. No event is removed
+  (`total_faults` keeps the history). Stored in `unit_reset`; the statistics job reads it, the API applies it at once.
+- `/api/units/{unitId}/resets?limit=50`: every reset of a unit, newest first (with `countingFrom`)
 
 `limit` must be between 1 and 1000. A wrong value gives status 400 with the reason.
 The two POST calls are the only calls that write; they write only to `unit_issue_ack`.

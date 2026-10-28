@@ -8,11 +8,11 @@ import java.time.LocalDateTime;
  *
  * @param unitId         the unit
  * @param unitTypeId     its model
- * @param creationDate   when the unit was created; may be null
- * @param faultsInWindow faults from the first day of the unit's window up to today
+ * @param countingFrom   the later of the creation date and the start of the day after the newest reset; may be null
+ * @param faultsInWindow faults from the first day of the unit's window (never before countingFrom) up to today
  * @param totalFaults    every fault the unit ever had
  * @param lastFaultDate  day of the newest fault; null when the unit never had one
  */
-public record UnitFaultTotals(long unitId, long unitTypeId, LocalDateTime creationDate,
+public record UnitFaultTotals(long unitId, long unitTypeId, LocalDateTime countingFrom,
                               int faultsInWindow, int totalFaults, LocalDate lastFaultDate) {
 }

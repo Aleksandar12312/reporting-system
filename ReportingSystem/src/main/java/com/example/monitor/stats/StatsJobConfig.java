@@ -121,7 +121,7 @@ public class StatsJobConfig {
                 .rowMapper((rs, rowNum) -> new UnitFaultTotals(
                         rs.getLong("unit_id"),
                         rs.getLong("unit_type_id"),
-                        rs.getObject("creation_date", LocalDateTime.class),
+                        rs.getObject("counting_from", LocalDateTime.class),
                         rs.getInt("faults_in_window"),
                         rs.getInt("total_faults"),
                         rs.getObject("last_fault_date", LocalDate.class)))

@@ -18,6 +18,7 @@ SELECT @unit_id AS unit_id,
 
 START TRANSACTION;
 DELETE FROM unit_issue_ack   WHERE unit_id = @unit_id;
+DELETE FROM unit_reset       WHERE unit_id = @unit_id;
 DELETE FROM unit_event_daily WHERE unit_id = @unit_id;
 DELETE FROM unit_stats       WHERE unit_id = @unit_id;
 DELETE FROM mock_unit_profile WHERE unit_id = @unit_id;   -- only exists with the mock data (schema_mock_key.sql); remove this line if the table is missing

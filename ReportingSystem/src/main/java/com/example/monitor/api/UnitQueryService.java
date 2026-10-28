@@ -90,6 +90,27 @@ public class UnitQueryService {
         return getUnitScore(unitId);
     }
 
+    /**
+     * Resets a unit (e.g. after a service): from the day after today it is counted as if it were new, for the tier
+     * and for every component, and it does not count in its model's median until it has enough history again.
+     * No event is removed. Returns the unit as it is now (tier OK, every component OK). 404 if the unit is unknown.
+     */
+    @Transactional
+    public UnitScore resetUnit(long unitId, AckRequest request) {
+        getUnitScore(unitId);
+        String[] byAndNote = checkAck(request);
+        LocalDateTime now = nowUtc();
+        issueRepository.insertReset(unitId, now, byAndNote[0], byAndNote[1]);
+        issueRepository.restartUnitStats(unitId, IssueRepository.countingFromReset(now), now);
+        return getUnitScore(unitId);
+    }
+
+    /** Every reset of one unit, newest first. */
+    public List<UnitReset> getResetHistory(long unitId, int limit) {
+        checkLimit(limit);
+        return issueRepository.loadResets(unitId, limit);
+    }
+
     /** Every "marked OK" of one unit, newest first. */
     public List<IssueAck> getAckHistory(long unitId, int limit) {
         checkLimit(limit);
@@ -100,7 +121,7 @@ public class UnitQueryService {
     private static String[] checkAck(AckRequest request) {
         String by = request == null || request.by() == null ? "" : request.by().trim();
         if (by.isEmpty()) {
-            throw new IllegalArgumentException("Field 'by' is required (who marks it as OK)");
+            throw new IllegalArgumentException("Field 'by' is required (who does it)");
         }
         if (by.length() > 100) {
             throw new IllegalArgumentException("Field 'by' must be at most 100 characters");

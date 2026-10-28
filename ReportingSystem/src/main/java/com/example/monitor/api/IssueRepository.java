@@ -108,6 +108,46 @@ public class IssueRepository {
                 unitId, component, at, by, note);
     }
 
+    // ------------------------------------------------------------------ reset unit
+
+    public void insertReset(long unitId, LocalDateTime at, String by, String note) {
+        jdbc.update("insert into unit_reset (unit_id, reset_at, reset_by, note) values (?, ?, ?, ?)",
+                unitId, at, by, note);
+    }
+
+    /**
+     * Makes the unit_stats row of a reset unit what the statistics job will calculate for it: the window starts at
+     * {@code countingFrom}, nothing counted yet. Without this the reset would only show after the next job run.
+     * total_faults and last_fault_date stay (they are the history of the unit).
+     */
+    public void restartUnitStats(long unitId, LocalDateTime countingFrom, LocalDateTime now) {
+        jdbc.update("""
+                update unit_stats
+                set window_start = ?, exposure_days = 0, faults_in_window = 0, rate_per_day = 0,
+                    in_baseline = false, computed_at = ?
+                where unit_id = ?
+                """, countingFrom, now, unitId);
+    }
+
+    /** Every reset of one unit, newest first. */
+    public List<UnitReset> loadResets(long unitId, int limit) {
+        return jdbc.query("""
+                select id, unit_id, reset_at, reset_by, note
+                from unit_reset where unit_id = ? order by reset_at desc, id desc limit ?
+                """,
+                (rs, rowNum) -> {
+                    LocalDateTime at = rs.getObject("reset_at", LocalDateTime.class);
+                    return new UnitReset(rs.getLong("id"), rs.getLong("unit_id"), at, rs.getString("reset_by"),
+                            rs.getString("note"), countingFromReset(at));
+                },
+                unitId, limit);
+    }
+
+    /** Start of the day after a reset: the same rule as "since OK" and as the statistics job. */
+    static LocalDateTime countingFromReset(LocalDateTime resetAt) {
+        return resetAt.toLocalDate().plusDays(1).atStartOfDay();
+    }
+
     /** Every "marked OK" of one unit, newest first. */
     public List<IssueAck> loadHistory(long unitId, int limit) {
         List<Object> args = new ArrayList<>();

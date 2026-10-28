@@ -65,6 +65,18 @@ class UnitStatsProcessorTest {
     }
 
     @Test
+    void aUnitResetTodayStartsAgainTomorrowLikeANewUnit() {
+        // counting_from = start of the day after the reset; the history (total faults) stays
+        UnitStats s = processor.process(new UnitFaultTotals(1, 1, NOW.toLocalDate().plusDays(1).atStartOfDay(),
+                0, 40, NOW.toLocalDate()));
+
+        assertThat(s.faultsInWindow()).isZero();
+        assertThat(s.exposureDays()).isZero();
+        assertThat(s.inBaseline()).isFalse();
+        assertThat(s.totalFaults()).isEqualTo(40);
+    }
+
+    @Test
     void aMissingCreationDateUsesTheWholeWindow() {
         assertThat(processor.process(new UnitFaultTotals(1, 1, null, 9, 9, null)).exposureDays())
                 .isCloseTo(90.0, within(1e-9));

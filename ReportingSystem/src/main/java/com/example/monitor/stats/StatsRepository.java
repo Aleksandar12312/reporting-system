@@ -28,6 +28,8 @@ import org.springframework.stereotype.Repository;
 public class StatsRepository {
 
     static final String SCHEMA_SCRIPT = "db/schema_stats.sql";
+    /** The tables of what users did (unit_reset is read by the unit_stats step); created here too, in case the job runs first. */
+    static final String USER_TABLES_SCRIPT = "db/schema_issues.sql";
 
     private final JdbcTemplate jdbc;
     private final List<String> faultSources;
@@ -59,7 +61,8 @@ public class StatsRepository {
     }
 
     private void runSchemaScript() {
-        new ResourceDatabasePopulator(new ClassPathResource(SCHEMA_SCRIPT)).execute(jdbc.getDataSource());
+        new ResourceDatabasePopulator(new ClassPathResource(SCHEMA_SCRIPT), new ClassPathResource(USER_TABLES_SCRIPT))
+                .execute(jdbc.getDataSource());
     }
 
     // ------------------------------------------------------------------ state and checks
@@ -164,25 +167,36 @@ public class StatsRepository {
 
     /**
      * Reader query of the unit_stats step: every unit with its faults (stats.fault-sources) from unit_event_daily.
-     * A unit younger than the window counts from its creation day. Parameters: {@link #unitTotalsArgs}.
+     * counting_from is the later of the creation date and the start of the day after the newest reset (unit_reset);
+     * the window never starts before it, so a reset unit is counted as if it were new.
+     * Parameters: {@link #unitTotalsArgs}.
      */
     public String unitTotalsSql() {
         return """
-                select u.id as unit_id, u.unit_type_id, u.creation_date,
-                       coalesce(sum(case when d.event_date >= date(greatest(?, u.creation_date)) and d.event_date <= ?
+                select x.unit_id, x.unit_type_id, x.counting_from,
+                       coalesce(sum(case when d.event_date >= date(greatest(?, coalesce(x.counting_from, ?)))
+                                          and d.event_date <= ?
                                          then d.event_count else 0 end), 0) as faults_in_window,
                        coalesce(sum(d.event_count), 0) as total_faults,
                        max(d.event_date) as last_fault_date
-                from unit u
-                left join unit_event_daily d on d.unit_id = u.id and d.source in (%s)
-                group by u.id, u.unit_type_id, u.creation_date
-                order by u.id
+                from (
+                    select u.id as unit_id, u.unit_type_id,
+                           case when r.reset_from is not null
+                                     and (u.creation_date is null or r.reset_from > u.creation_date)
+                                then r.reset_from else u.creation_date end as counting_from
+                    from unit u
+                    left join (select unit_id, timestamp(date(max(reset_at)) + interval 1 day) as reset_from
+                               from unit_reset group by unit_id) r on r.unit_id = u.id
+                ) x
+                left join unit_event_daily d on d.unit_id = x.unit_id and d.source in (%s)
+                group by x.unit_id, x.unit_type_id, x.counting_from
+                order by x.unit_id
                 """.formatted(sourcePlaceholders);
     }
 
-    /** Parameters of {@link #unitTotalsSql()}: start of the longest window (now - window-days), today, fault sources. */
+    /** Parameters of {@link #unitTotalsSql()}: start of the longest window (now - window-days) twice, today, fault sources. */
     public Object[] unitTotalsArgs(LocalDateTime windowStart, LocalDate today) {
-        return withSources(windowStart, today);
+        return withSources(windowStart, windowStart, today);
     }
 
     /** Inserts or replaces the rows of the given units. */

@@ -8,6 +8,7 @@ USE mock_lincstation;
 -- Drop in reverse dependency order so the script can be re-run.
 -- The statistics tables hold numbers derived from event; the application creates and fills them again.
 DROP TABLE IF EXISTS unit_issue_ack;
+DROP TABLE IF EXISTS unit_reset;
 DROP TABLE IF EXISTS unit_event_daily;
 DROP TABLE IF EXISTS unit_scanner_daily;   -- old, replaced by unit_event_daily
 DROP TABLE IF EXISTS unit_fault_daily;     -- old, replaced by unit_event_daily

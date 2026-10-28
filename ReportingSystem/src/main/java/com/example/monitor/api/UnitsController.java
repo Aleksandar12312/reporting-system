@@ -12,7 +12,8 @@ import org.springframework.web.bind.annotation.RestController;
 
 /**
  * REST access to the unit statistics. The numbers are as fresh as the last run of the statistics job
- * (every 5 minutes); the event lists are read live. The only calls that write are the "mark as OK" POSTs.
+ * (every 5 minutes); the event lists are read live. The only calls that write are the "mark as OK" and
+ * "reset" POSTs.
  *
  * <ul>
  *   <li>GET /api/units/scores: every unit, highest ratio first</li>
@@ -27,6 +28,8 @@ import org.springframework.web.bind.annotation.RestController;
  *       of a unit as OK</li>
  *   <li>POST /api/units/{unitId}/issues/ack: mark every component that has a problem as OK</li>
  *   <li>GET /api/units/{unitId}/issues/history?limit=50: every "marked OK" of a unit, newest first</li>
+ *   <li>POST /api/units/{unitId}/reset: count the unit as if it were new from tomorrow (tier and components)</li>
+ *   <li>GET /api/units/{unitId}/resets?limit=50: every reset of a unit, newest first</li>
  * </ul>
  *
  * A wrong parameter (unknown tier or fault, limit outside 1..1000, text instead of a number) gives status 400;
@@ -95,6 +98,16 @@ public class UnitsController {
     @PostMapping("/{unitId}/issues/ack")
     public UnitScore markAllOk(@PathVariable long unitId, @RequestBody(required = false) AckRequest body) {
         return service.markAllOk(unitId, body);
+    }
+
+    @PostMapping("/{unitId}/reset")
+    public UnitScore reset(@PathVariable long unitId, @RequestBody(required = false) AckRequest body) {
+        return service.resetUnit(unitId, body);
+    }
+
+    @GetMapping("/{unitId}/resets")
+    public List<UnitReset> resetHistory(@PathVariable long unitId, @RequestParam(defaultValue = "50") int limit) {
+        return service.getResetHistory(unitId, limit);
     }
 
     @GetMapping("/{unitId}/issues/history")
