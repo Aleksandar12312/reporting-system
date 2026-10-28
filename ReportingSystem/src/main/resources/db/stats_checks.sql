@@ -62,4 +62,4 @@ SELECT es.part, es.category, d.source, SUM(d.event_count) AS events
 FROM unit_event_daily d
 JOIN event_source es ON es.source = d.source
 GROUP BY es.part, es.category, d.source
-ORDER BY es.part IS NULL, es.part, es.category, events DESC;
+ORDER BY es.part = 'OTHER', es.part, es.category, events DESC;

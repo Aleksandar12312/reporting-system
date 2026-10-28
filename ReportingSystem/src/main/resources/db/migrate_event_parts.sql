@@ -8,11 +8,12 @@
 -- No event and no "marked OK" (unit_issue_ack) is removed.
 USE mock_lincstation;
 
--- 1. The new column (NULL = not assigned to a component)
-ALTER TABLE event_source ADD COLUMN part VARCHAR(20) NULL AFTER description;
+-- 1. The new column. Never NULL: OTHER = not assigned to a component yet.
+-- (Already added it as nullable with the first version of this script? Run migrate_event_parts_not_null.sql instead.)
+ALTER TABLE event_source ADD COLUMN part VARCHAR(20) NOT NULL DEFAULT 'OTHER' AFTER description;
 
 -- 2. Components of the events. For now only the scanner and the recycler;
--- the coin, cashbox and system events stay NULL until they get a component of their own.
+-- the coin, cashbox and system events stay OTHER until they get a component of their own.
 UPDATE event_source SET part = 'SCANNER'
 WHERE source IN ('READ_NOTE', 'NOTE_REJECTING', 'NOTE_REJECTED', 'CREDIT_NOTE');
 
@@ -23,7 +24,7 @@ WHERE source IN ('ERROR_DURING_PAYOUT', 'INCOMPLETE_PAYOUT', 'INCOMPLETE_FLOAT',
                  'SMART_EMPTYING', 'SMART_EMPTIED', 'NOTE_STORED_IN_PAYOUT', 'NOTE_FLOAT_REMOVED', 'NOTE_FLOAT_ATTACHED');
 
 -- 3. Check: every event name with its component
-SELECT part, category, source FROM event_source ORDER BY part IS NULL, part, category, source;
+SELECT part, category, source FROM event_source ORDER BY part = 'OTHER', part, category, source;
 
 -- Later, a new component is the same kind of UPDATE, e.g.
 --   UPDATE event_source SET part = 'COIN' WHERE source LIKE 'COIN%';

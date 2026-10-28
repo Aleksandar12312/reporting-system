@@ -73,15 +73,15 @@ CREATE TABLE unit (
 --             STATUS     a change of state (start-up, reset, disabled, note cleared after power-up ...)
 --             OPERATION  normal work (reading, storing, paying out notes)
 --             COMMAND    a reply to a command of the host
---   part      the component of the machine the event is about (SCANNER, RECYCLER ...); NULL = not assigned.
---             Free text on purpose: a new component is an UPDATE of this column plus a block in
---             ranking.components, no new table. The REST API shows a fault without a part as OTHER.
+--   part      the component of the machine the event is about (SCANNER, RECYCLER ...). Never NULL: an event that
+--             has no component yet is OTHER (the default). Free text on purpose: a new component is an UPDATE of
+--             this column plus a block in ranking.components, no new table.
 CREATE TABLE event_source (
     source       VARCHAR(40)   NOT NULL,
     code         SMALLINT      NOT NULL,
     category     VARCHAR(10)   NOT NULL,
     description  VARCHAR(100)  NOT NULL,
-    part         VARCHAR(20)   NULL,
+    part         VARCHAR(20)   NOT NULL DEFAULT 'OTHER',
     PRIMARY KEY (source),
     UNIQUE KEY uq_event_source_code (code),
     KEY idx_event_source_category (category),
@@ -150,7 +150,7 @@ INSERT INTO event_source (code, source, category, description) VALUES
     (250, 'KEY_NOT_SET', 'WARNING', 'The encryption key is not set');
 
 -- Components of the events (event_source.part). For now only the scanner and the recycler;
--- the coin, cashbox and system events stay NULL until they get a component of their own.
+-- every other event keeps the default OTHER until it gets a component of its own.
 UPDATE event_source SET part = 'SCANNER'
 WHERE source IN ('READ_NOTE', 'NOTE_REJECTING', 'NOTE_REJECTED', 'CREDIT_NOTE');
 

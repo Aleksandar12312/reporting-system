@@ -90,7 +90,7 @@ message back; the model medians always use every unit's whole window.
 The tier of the fault rate is raised to at least WATCH while a unit has a SCANNER or RECYCLER message that is
 ACTIVE or RECURRING (OK and NO_BASELINE become WATCH; WATCH and CRITICAL stay). So such a unit is in
 `/problematic`, in the WATCH count of `/summary` and in `?tier=WATCH`. Rate, ratio and scope stay those of the faults.
-`topPart` and the part of `/faults` and the event lists are `event_source.part` (`OTHER` for a fault without one).
+`topPart` and the part of `/faults` and the event lists are `event_source.part` (`OTHER` = not assigned to a component yet; the column is never NULL).
 Marking the component as OK brings the tier of the fault rate back.
 
 Tier and scope are decided by `RankingEngine` from the `ranking:` block of `application-dev.yml`
