@@ -84,7 +84,7 @@ public class ComponentCatalog {
                 """, Integer.class);
         if (partColumns == null || partColumns == 0) {
             throw new IllegalStateException(
-                    "Table event_source has no column part: run db/migrate_event_parts.sql once");
+                    "Table event_source has no column part: create the schema again with db/schema.sql");
         }
         return jdbc.query("select source, category, part from event_source",
                 (rs, rowNum) -> new EventSourceRow(rs.getString("source"), rs.getString("category"),

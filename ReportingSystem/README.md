@@ -31,10 +31,7 @@ New profiles only appear after a re-seed (see below); an existing database keeps
 ## Re-seeding from scratch
 
 Re-run `schema.sql` and `schema_mock_key.sql`, then start the app again. `schema.sql` also drops the statistics
-tables; the app creates and fills them again. To keep an existing database instead, run
-`db/migrate_recycler_events.sql` (widens the text columns, adds `event_source`, deletes the old non-recycler events).
-An existing database from before the column `event_source.part` needs `db/migrate_event_parts.sql` once (adds the
-column and gives every event SCANNER or RECYCLER); the app tells you in the log when it is missing.
+tables; the app creates and fills them again.
 Set `mock.enabled: false` to switch the whole generator off.
 
 ## REST API (package `api`)
@@ -100,8 +97,7 @@ Marking the component as OK brings the tier of the fault rate back.
 
 Tier and scope are decided by `RankingEngine` from the `ranking:` block of `application-dev.yml`
 (`min-faults`, `watch-ratio`, `critical-ratio`, `part-min-faults`, `part-share`). The rate, the model median, the window and the
-fault sources come from the statistics job (`stats:` block). The old Java scoring code is in `scoring_backup.zip`;
-the same algorithm still exists as the SQL view in `db/unit_score.sql`.
+fault sources come from the statistics job (`stats:` block). The old Java scoring code is in `scoring_backup.zip`.
 
 Tests: `mvn test`.
 
@@ -132,7 +128,7 @@ When it runs: once when the app is ready (after the mock seeder), then on `stats
 The app creates the tables itself (`db/schema_stats.sql`; it also drops the old `unit_fault_daily` and
 `unit_scanner_daily`, which `unit_event_daily` replaced, and then builds the statistics once from the event table)
 and Spring Boot creates the Spring Batch tables (`BATCH_...`).
-Useful scripts: `db/stats_checks.sql` (read-only checks, last job runs), `db/stats_reset.sql` (forces a full rebuild).
+To force a full rebuild, empty `stats_etl_state` (`DELETE FROM stats_etl_state;`); the next run builds everything again.
 Settings: the `stats:` block of `application-dev.yml`; `stats.enabled: false` switches the whole job off.
 
 Assumption: events are only ever added (never changed or deleted) and written by one writer at a time (the mock generator).
