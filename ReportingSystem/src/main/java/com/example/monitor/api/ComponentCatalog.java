@@ -78,14 +78,6 @@ public class ComponentCatalog {
     }
 
     private List<EventSourceRow> loadEventSources() {
-        Integer partColumns = jdbc.queryForObject("""
-                select count(*) from information_schema.columns
-                where table_schema = database() and table_name = 'event_source' and column_name = 'part'
-                """, Integer.class);
-        if (partColumns == null || partColumns == 0) {
-            throw new IllegalStateException(
-                    "Table event_source has no column part: create the schema again with db/schema.sql");
-        }
         return jdbc.query("select source, category, part from event_source",
                 (rs, rowNum) -> new EventSourceRow(rs.getString("source"), rs.getString("category"),
                         rs.getString("part")));
