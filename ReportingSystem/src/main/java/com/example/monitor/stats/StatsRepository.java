@@ -2,7 +2,6 @@ package com.example.monitor.stats;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
@@ -31,14 +30,16 @@ public class StatsRepository {
     /** The tables of what users did (unit_reset is read by the unit_stats step); created here too, in case the job runs first. */
     static final String USER_TABLES_SCRIPT = "db/schema_issues.sql";
 
-    private final JdbcTemplate jdbc;
-    private final List<String> faultSources;
-    private final String sourcePlaceholders;
+    /**
+     * The names of the faults: every event with event_source.category = 'FAULT'. The one place that decides what
+     * a fault is; used as "source in (" + FAULT_SOURCES_SQL + ")" here and in the REST API.
+     */
+    public static final String FAULT_SOURCES_SQL = "select source from event_source where category = 'FAULT'";
 
-    public StatsRepository(JdbcTemplate jdbc, StatsProperties props) {
+    private final JdbcTemplate jdbc;
+
+    public StatsRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.faultSources = props.faultSources();
-        this.sourcePlaceholders = String.join(", ", Collections.nCopies(faultSources.size(), "?"));
     }
 
     // ------------------------------------------------------------------ tables
@@ -166,7 +167,7 @@ public class StatsRepository {
     // ------------------------------------------------------------------ unit_stats
 
     /**
-     * Reader query of the unit_stats step: every unit with its faults (stats.fault-sources) from unit_event_daily.
+     * Reader query of the unit_stats step: every unit with its faults (event_source.category = 'FAULT') from unit_event_daily.
      * counting_from is the later of the creation date and the start of the day after the newest reset (unit_reset);
      * the window never starts before it, so a reset unit is counted as if it were new.
      * Parameters: {@link #unitTotalsArgs}.
@@ -191,12 +192,12 @@ public class StatsRepository {
                 left join unit_event_daily d on d.unit_id = x.unit_id and d.source in (%s)
                 group by x.unit_id, x.unit_type_id, x.counting_from
                 order by x.unit_id
-                """.formatted(sourcePlaceholders);
+                """.formatted(FAULT_SOURCES_SQL);
     }
 
-    /** Parameters of {@link #unitTotalsSql()}: start of the longest window (now - window-days) twice, today, fault sources. */
+    /** Parameters of {@link #unitTotalsSql()}: start of the longest window (now - window-days) twice, today. */
     public Object[] unitTotalsArgs(LocalDateTime windowStart, LocalDate today) {
-        return withSources(windowStart, windowStart, today);
+        return new Object[] {windowStart, windowStart, today};
     }
 
     /** Inserts or replaces the rows of the given units. */
@@ -250,17 +251,5 @@ public class StatsRepository {
                         r.unitTypeId(), r.modelName(), r.windowDays(), r.unitCount(), r.baselineUnitCount(),
                         r.faultsInWindow(), r.medianRatePerDay(), r.meanRatePerDay(), r.computedAt()})
                         .toList());
-    }
-
-    // ------------------------------------------------------------------ helpers
-
-    /** The given parameters followed by the fault sources (for the "source in (?, ?, ...)" part). */
-    private Object[] withSources(Object... first) {
-        Object[] params = new Object[first.length + faultSources.size()];
-        System.arraycopy(first, 0, params, 0, first.length);
-        for (int i = 0; i < faultSources.size(); i++) {
-            params[first.length + i] = faultSources.get(i);
-        }
-        return params;
     }
 }

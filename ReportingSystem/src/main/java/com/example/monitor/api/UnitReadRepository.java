@@ -4,14 +4,13 @@ import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.stream.Collectors;
 
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
 import com.example.monitor.api.RankingEngine.PartCount;
 import com.example.monitor.api.RankingEngine.ScoreRow;
-import com.example.monitor.stats.StatsProperties;
+import com.example.monitor.stats.StatsRepository;
 
 /**
  * Read-only SQL of the REST API. The numbers come from the statistics tables (unit_stats, model_stats,
@@ -28,11 +27,14 @@ public class UnitReadRepository {
     public static final String OTHER_PART = "OTHER";
 
     private final JdbcTemplate jdbc;
-    private final StatsProperties stats;
 
-    public UnitReadRepository(JdbcTemplate jdbc, StatsProperties stats) {
+    public UnitReadRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.stats = stats;
+    }
+
+    /** The names of the faults (event_source.category = 'FAULT'), alphabetical. */
+    public List<String> loadFaultKinds() {
+        return jdbc.queryForList(StatsRepository.FAULT_SOURCES_SQL + " order by source", String.class);
     }
 
     /** Every unit with its window numbers and the median of its model. */
@@ -66,7 +68,7 @@ public class UnitReadRepository {
 
     /** Like {@link #loadPartCounts()}, but only one unit when unitId is given. */
     public List<PartCount> loadPartCounts(Long unitId) {
-        List<Object> args = new ArrayList<>(stats.faultSources());
+        List<Object> args = new ArrayList<>();
         String unitFilter = "";
         if (unitId != null) {
             unitFilter = " and d.unit_id = ?";
@@ -79,7 +81,7 @@ public class UnitReadRepository {
                 left join event_source es on es.source = d.source
                 where d.source in (%s)
                   and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
-                """.formatted(OTHER_PART, sourcePlaceholders()) + unitFilter + """
+                """.formatted(OTHER_PART, StatsRepository.FAULT_SOURCES_SQL) + unitFilter + """
                  group by d.unit_id, coalesce(es.part, '%s')
                 """.formatted(OTHER_PART),
                 (rs, rowNum) -> new PartCount(rs.getLong("unit_id"), rs.getString("part"), rs.getInt("fault_count")),
@@ -111,7 +113,6 @@ public class UnitReadRepository {
     public List<FaultBreakdown> loadBreakdown(long unitId) {
         List<Object> args = new ArrayList<>();
         args.add(unitId);
-        args.addAll(stats.faultSources());
         List<FaultRow> rows = jdbc.query("""
                 select coalesce(es.part, '%s') as part, d.source as fault, sum(d.event_count) as fault_count
                 from unit_event_daily d
@@ -121,7 +122,7 @@ public class UnitReadRepository {
                   and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
                 group by coalesce(es.part, '%s'), d.source
                 order by fault_count desc, 1, 2
-                """.formatted(OTHER_PART, sourcePlaceholders(), OTHER_PART),
+                """.formatted(OTHER_PART, StatsRepository.FAULT_SOURCES_SQL, OTHER_PART),
                 (rs, rowNum) -> new FaultRow(rs.getString("part"), rs.getString("fault"), rs.getInt("fault_count")),
                 args.toArray());
         return withPercentages(unitId, rows);
@@ -154,15 +155,14 @@ public class UnitReadRepository {
 
     /**
      * Newest events of one unit, over its whole history (not only the window).
-     * With faultsOnly only the configured fault sources are returned.
+     * With faultsOnly only the faults (event_source.category = 'FAULT') are returned.
      */
     public List<UnitEvent> loadEvents(long unitId, boolean faultsOnly, int limit) {
         List<Object> args = new ArrayList<>();
         args.add(unitId);
         String sourceFilter = "";
         if (faultsOnly) {
-            sourceFilter = " and e.source in (" + sourcePlaceholders() + ")";
-            args.addAll(stats.faultSources());
+            sourceFilter = " and e.source in (" + StatsRepository.FAULT_SOURCES_SQL + ")";
         }
         args.add(limit);
         String sql = "select e.id, e.unit_id, e.event_time, e.type, es.part, e.source from event e"
@@ -187,10 +187,5 @@ public class UnitReadRepository {
                 .map(r -> new FaultBreakdown(unitId, r.part(), r.fault(), r.faults(),
                         Math.round(1000.0 * r.faults() / total) / 10.0))
                 .toList();
-    }
-
-    /** "?, ?, ?" with one placeholder per configured fault source. */
-    private String sourcePlaceholders() {
-        return stats.faultSources().stream().map(s -> "?").collect(Collectors.joining(", "));
     }
 }

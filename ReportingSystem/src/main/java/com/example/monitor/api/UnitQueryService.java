@@ -178,9 +178,9 @@ public class UnitQueryService {
         return catalog.components();
     }
 
-    /** The fault kinds the system counts, in the configured order. */
+    /** The fault kinds the system counts (event_source.category = 'FAULT'), alphabetical. */
     public List<String> getFaultKinds() {
-        return stats.faultSources();
+        return repository.loadFaultKinds();
     }
 
     /** Only WATCH and CRITICAL units. */
@@ -210,7 +210,7 @@ public class UnitQueryService {
         return repository.loadEvents(unitId, false, limit);
     }
 
-    /** Newest fault events of one unit (only the configured fault sources), over its whole history. */
+    /** Newest fault events of one unit (only event_source.category = 'FAULT'), over its whole history. */
     public List<UnitEvent> getUnitFaultEvents(long unitId, int limit) {
         checkLimit(limit);
         return repository.loadEvents(unitId, true, limit);
@@ -219,16 +219,17 @@ public class UnitQueryService {
     /**
      * Units with the most faults of one kind (e.g. JAMMED) in their window.
      *
-     * @param fault one of the configured fault sources, in any letter case
+     * @param fault the name of a fault (event_source.category = 'FAULT'), in any letter case
      */
     public List<FaultRanking> getTopUnitsByFault(String fault, int limit) {
         checkLimit(limit);
         if (fault == null || fault.isBlank()) {
-            throw new IllegalArgumentException("Parameter 'fault' is required. Use one of " + stats.faultSources());
+            throw new IllegalArgumentException("Parameter 'fault' is required. Use one of " + repository.loadFaultKinds());
         }
         String normalized = fault.trim().toUpperCase(Locale.ROOT);
-        if (!stats.faultSources().contains(normalized)) {
-            throw new IllegalArgumentException("Unknown fault '" + fault + "'. Use one of " + stats.faultSources());
+        List<String> kinds = repository.loadFaultKinds();
+        if (!kinds.contains(normalized)) {
+            throw new IllegalArgumentException("Unknown fault '" + fault + "'. Use one of " + kinds);
         }
         return repository.loadFaultRanking(normalized, limit);
     }

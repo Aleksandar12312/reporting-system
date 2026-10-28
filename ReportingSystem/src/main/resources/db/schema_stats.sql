@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS unit_event_daily (
 ) ENGINE = InnoDB;
 
 -- One row per unit, also for a unit without faults. The window is the last stats.window-days days,
--- or shorter for a younger unit; faults (stats.fault-sources) are counted from the first day of the window.
+-- or shorter for a younger unit; faults (event_source.category = 'FAULT') are counted from the first day of the window.
 CREATE TABLE IF NOT EXISTS unit_stats (
     unit_id           BIGINT    NOT NULL,
     unit_type_id      BIGINT    NOT NULL,

@@ -12,7 +12,7 @@ import org.springframework.web.bind.annotation.RestController;
  * <ul>
  *   <li>GET /api/summary: tier counts, window days and the time of the last statistics run</li>
  *   <li>GET /api/models: one row per model (units, faults, median and mean rate)</li>
- *   <li>GET /api/fault-kinds: the fault kinds the system counts (stats.fault-sources)</li>
+ *   <li>GET /api/fault-kinds: the fault kinds the system counts (event_source.category = 'FAULT')</li>
  *   <li>GET /api/components: the components that get their own message (ranking.components), in order</li>
  * </ul>
  */

@@ -18,7 +18,6 @@ import com.example.monitor.mock.EventSimulator.Rates;
 import com.example.monitor.mock.EventSimulator.SimUnit;
 import com.example.monitor.recycler.EventCategory;
 import com.example.monitor.recycler.RecyclerEvent;
-import com.example.monitor.stats.StatsProperties;
 
 class EventSimulatorTest {
 
@@ -140,11 +139,6 @@ class EventSimulatorTest {
         long recoveries = events.stream().filter(e -> e.source().equals("JAM_RECOVERY")).count();
         assertThat(jams).isGreaterThan(0L);
         assertThat(recoveries).isEqualTo(jams);
-    }
-
-    @Test
-    void statsDefaultsCountExactlyTheFaultEvents() {
-        assertThat(StatsProperties.defaults().faultSources()).isEqualTo(RecyclerEvent.faultSources());
     }
 
     private static boolean isFault(MockEvent e) {

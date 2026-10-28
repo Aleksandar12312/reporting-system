@@ -119,7 +119,7 @@ public enum RecyclerEvent {
         return Optional.ofNullable(BY_SOURCE.get(source));
     }
 
-    /** event.source of every FAULT event, in code order: the same list as stats.fault-sources. */
+    /** event.source of every FAULT event, in code order (the mock generator uses it; the application reads the same fact from event_source.category). */
     public static List<String> faultSources() {
         return Arrays.stream(values()).filter(RecyclerEvent::isFault).map(RecyclerEvent::source).toList();
     }

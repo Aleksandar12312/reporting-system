@@ -23,7 +23,7 @@ class FakeStatsRepository extends StatsRepository {
     final List<Long> savedStates = new ArrayList<>();
 
     FakeStatsRepository() {
-        super(null, StatsProperties.defaults());
+        super(null);
     }
 
     @Override

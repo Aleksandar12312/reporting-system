@@ -71,16 +71,4 @@ stats:
   chunk-size: 500                  # units per transaction while writing unit_stats
   window-days: 90                  # look back at most this many days (shorter for new units)
   baseline-min-days: 14            # a unit needs this much history to count in its model's median
-  fault-sources:                   # every FAULT event of the recycler event list (event_source.category = 'FAULT')
-    - ERROR_DURING_PAYOUT
-    - COIN_MECH_ERROR
-    - COIN_MECH_JAMMED
-    - PAYOUT_OUT_OF_SERVICE
-    - JAMMED
-    - TIME_OUT
-    - INCOMPLETE_PAYOUT
-    - INCOMPLETE_FLOAT
-    - UNSAFE_NOTE_JAM
-    - SAFE_NOTE_JAM
-    - SOFTWARE_ERROR
-    - FAIL
+  # What counts as a fault is not set here: every event with event_source.category = 'FAULT'.

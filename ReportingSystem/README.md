@@ -22,7 +22,7 @@ with an `UPDATE` at any time. `event.source` has a foreign key to `event_source`
 refused. Per unit and day the generator sends about 10 customer transactions (`transactions-per-day`, a deposit is
 about 4 events, a payout 2), 2 warnings/state changes (`status-events-per-day`) and the faults of its model and profile:
 about 35 events per unit per day, ~620,000 events for the 90-day history. Command replies and coin/ticket events are
-in the list but never generated. Only FAULT events count as problems (`stats.fault-sources`).
+in the list but never generated. Only FAULT events (`event_source.category = 'FAULT'`) count as faults.
 
 The answer key (which unit got which planted behaviour) is in the table `mock_unit_profile`.
 `mock.planted.dirty-scanner` units have normal faults, but their scanner rejects 30% of the notes instead of 8%.
@@ -46,7 +46,7 @@ the event lists are read live from `event`.
 - `/api/units/scores`: every unit, worst first
 - `/api/units/problematic`: WATCH and CRITICAL units; optional `?tier=CRITICAL` or `?tier=WATCH`
 - `/api/units/worst?limit=10`: the worst units, CRITICAL first
-- `/api/units/top-by-fault?fault=JAMMED&limit=10`: units with the most faults of one kind (`stats.fault-sources`)
+- `/api/units/top-by-fault?fault=JAMMED&limit=10`: units with the most faults of one kind (the FAULT events of `event_source`)
 - `/api/units/{unitId}`: one unit (status 404 if unknown)
 - `/api/units/{unitId}/faults`: faults of one unit by component and fault name
 - `/api/units/{unitId}/fault-events?limit=100`: newest fault events of one unit
@@ -55,7 +55,7 @@ the event lists are read live from `event`.
 - `/api/summary`: `{computedAt, windowDays, unitCount, tiers, issues}`, for the dashboard cards and "Updated hh:mm"
   (`issues`: units with a problem per component)
 - `/api/models`: one row per model from `model_stats`
-- `/api/fault-kinds`: the fault kinds that are counted (`stats.fault-sources`)
+- `/api/fault-kinds`: the fault kinds that are counted (the FAULT events of `event_source`)
 - `/api/components`: the components that get their own message (`ranking.components`), in order, with their rule
   and resolved event names; a front end can build one tab per component from it
 
