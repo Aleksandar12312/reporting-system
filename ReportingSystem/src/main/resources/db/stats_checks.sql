@@ -2,12 +2,10 @@
 -- (put the cursor in the query, Ctrl+Enter).
 USE mock_lincstation;
 
--- 1. The daily table must hold exactly as many faults as the event table up to last_event_id (difference 0)
+-- 1. The daily table must hold exactly as many events as the event table up to last_event_id (difference 0)
 SELECT s.last_event_id,
-       (SELECT COALESCE(SUM(faults), 0) FROM unit_fault_daily) AS in_daily_table,
-       (SELECT COUNT(*) FROM event e
-         WHERE e.id <= s.last_event_id
-           AND e.source IN (SELECT fs.source FROM event_source fs WHERE fs.category = 'FAULT')) AS in_event_table,
+       (SELECT COALESCE(SUM(event_count), 0) FROM unit_event_daily) AS in_daily_table,
+       (SELECT COUNT(*) FROM event e WHERE e.id <= s.last_event_id AND e.source IS NOT NULL) AS in_event_table,
        (SELECT MAX(id) FROM event) - s.last_event_id AS events_waiting_for_next_run
 FROM stats_etl_state s;
 
@@ -42,11 +40,14 @@ ORDER BY s.category, events DESC;
 
 -- 7. Reject share per planted profile (DIRTY_SCANNER about 0.30, every other profile about 0.08).
 --    The REST API flags a scanner at 2 x the model median, so all DIRTY_SCANNER units should be flagged.
-SELECT p.profile, COUNT(DISTINCT s.unit_id) AS units, SUM(s.notes_read) AS notes_read,
-       SUM(s.notes_rejected) AS notes_rejected,
-       ROUND(SUM(s.notes_rejected) / NULLIF(SUM(s.notes_read), 0), 3) AS reject_share
-FROM unit_scanner_daily s
-JOIN mock_unit_profile p ON p.unit_id = s.unit_id
+SELECT p.profile, COUNT(DISTINCT d.unit_id) AS units,
+       SUM(CASE WHEN d.source = 'READ_NOTE' THEN d.event_count ELSE 0 END) AS notes_read,
+       SUM(CASE WHEN d.source = 'NOTE_REJECTED' THEN d.event_count ELSE 0 END) AS notes_rejected,
+       ROUND(SUM(CASE WHEN d.source = 'NOTE_REJECTED' THEN d.event_count ELSE 0 END)
+             / NULLIF(SUM(CASE WHEN d.source = 'READ_NOTE' THEN d.event_count ELSE 0 END), 0), 3) AS reject_share
+FROM unit_event_daily d
+JOIN mock_unit_profile p ON p.unit_id = d.unit_id
+WHERE d.source IN ('READ_NOTE', 'NOTE_REJECTED')
 GROUP BY p.profile
 ORDER BY reject_share DESC;
 
@@ -55,3 +56,10 @@ SELECT a.unit_id, a.component, a.acked_at, a.acked_by, a.note
 FROM unit_issue_ack a
 JOIN (SELECT MAX(id) AS max_id FROM unit_issue_ack GROUP BY unit_id, component) m ON m.max_id = a.id
 ORDER BY a.acked_at DESC;
+
+-- 9. Events per component (event_source.part) in unit_event_daily; NULL = the event has no component yet
+SELECT es.part, es.category, d.source, SUM(d.event_count) AS events
+FROM unit_event_daily d
+JOIN event_source es ON es.source = d.source
+GROUP BY es.part, es.category, d.source
+ORDER BY es.part IS NULL, es.part, es.category, events DESC;

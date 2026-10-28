@@ -4,21 +4,22 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
+import com.example.monitor.api.RankingProperties.ComponentRule;
+
 /**
- * Decides per unit whether something is wrong with the scanner and with the recycler. Pure Java.
+ * Decides per unit and component (ranking.components) whether something is wrong. Pure Java.
  *
  * <ul>
- *   <li>SCANNER: share of rejected notes (NOTE_REJECTED / READ_NOTE) compared with the median of the model.
- *       Something is wrong when the share is at least ranking.scanner.ratio times the median and the unit read
- *       at least min-reads notes and rejected at least min-rejects.</li>
- *   <li>RECYCLER: faults per day of the recycler fault kinds compared with the median of the model, at least
- *       ranking.recycler.min-faults faults in at least min-days days.</li>
+ *   <li>SHARE (e.g. SCANNER): problems / work (rejected notes / notes read) compared with the median of the model.
+ *       Something is wrong when the share is at least {@code ratio} times the median, with at least min-work work
+ *       events and min-problems problem events.</li>
+ *   <li>PER_DAY (e.g. RECYCLER): problem events per day compared with the median of the model, at least
+ *       min-problems problems in at least min-days days.</li>
  * </ul>
  *
  * After a component was marked OK, only the days after that day count for that unit and component
@@ -32,17 +33,15 @@ public final class IssueEngine {
                              double exposureDays) {
     }
 
-    /** Scanner numbers of one unit: in the whole window, and only after the day it was last marked OK. */
-    public record ScannerCounts(long unitId, int readsInWindow, int rejectedInWindow, int readsSinceOk,
-                                int rejectedSinceOk) {
-    }
-
-    /** Recycler faults of one unit: in the whole window, and only after the day it was last marked OK. */
-    public record RecyclerCounts(long unitId, int faultsInWindow, int faultsSinceOk) {
+    /**
+     * Work and problem events of one unit for one component: in the whole window, and only after the day it was
+     * last marked OK. PER_DAY components have no work events (0).
+     */
+    public record Counts(long unitId, int workInWindow, int problemsInWindow, int workSinceOk, int problemsSinceOk) {
     }
 
     /** The newest "marked OK" of one unit and component. */
-    public record LastOk(long unitId, IssueComponent component, LocalDateTime at, String by, String note) {
+    public record LastOk(long unitId, String component, LocalDateTime at, String by, String note) {
     }
 
     private static final double SECONDS_PER_DAY = 86_400.0;
@@ -50,77 +49,70 @@ public final class IssueEngine {
     private final RankingProperties props;
     private final int baselineMinDays;
 
-    /** @param baselineMinDays a unit needs this many days of history to count in the recycler median */
+    /** @param baselineMinDays a unit needs this many days of history to count in a PER_DAY median */
     public IssueEngine(RankingProperties props, int baselineMinDays) {
         this.props = props;
         this.baselineMinDays = baselineMinDays;
     }
 
-    /** One entry per unit, each with one ComponentIssue per component (SCANNER, then RECYCLER). */
-    public Map<Long, List<ComponentIssue>> evaluate(List<UnitWindow> units, List<ScannerCounts> scannerCounts,
-                                                    List<RecyclerCounts> recyclerCounts, List<LastOk> lastOks) {
-        Map<Long, ScannerCounts> scanner = new HashMap<>();
-        scannerCounts.forEach(c -> scanner.put(c.unitId(), c));
-        Map<Long, RecyclerCounts> recycler = new HashMap<>();
-        recyclerCounts.forEach(c -> recycler.put(c.unitId(), c));
-        Map<Long, Map<IssueComponent, LastOk>> oks = new HashMap<>();
-        lastOks.forEach(ok -> oks.computeIfAbsent(ok.unitId(), k -> new EnumMap<>(IssueComponent.class))
-                .put(ok.component(), ok));
-
-        Map<String, Double> scannerMedians = medianPerModel(units, u -> {
-            ScannerCounts c = scanner.get(u.unitId());
-            return c != null && c.readsInWindow() >= props.scanner().minReads()
-                    ? (double) c.rejectedInWindow() / c.readsInWindow()
-                    : null;
-        });
-        Map<String, Double> recyclerMedians = medianPerModel(units, u -> {
-            RecyclerCounts c = recycler.get(u.unitId());
-            int faults = c == null ? 0 : c.faultsInWindow();
-            return u.exposureDays() >= baselineMinDays && u.exposureDays() > 0 ? faults / u.exposureDays() : null;
-        });
+    /**
+     * One entry per unit, each with one ComponentIssue per component, in the order of ranking.components.
+     *
+     * @param counts per component id, the counts of the units that have any of its events (others count as 0)
+     */
+    public Map<Long, List<ComponentIssue>> evaluate(List<UnitWindow> units, Map<String, List<Counts>> counts,
+                                                    List<LastOk> lastOks) {
+        Map<String, Map<Long, LastOk>> oks = new HashMap<>();
+        lastOks.forEach(ok -> oks.computeIfAbsent(ok.component(), k -> new HashMap<>()).put(ok.unitId(), ok));
 
         Map<Long, List<ComponentIssue>> result = new HashMap<>();
-        for (UnitWindow u : units) {
-            Map<IssueComponent, LastOk> unitOks = oks.getOrDefault(u.unitId(), Map.of());
-            result.put(u.unitId(), List.of(
-                    scannerIssue(u, scanner.get(u.unitId()), scannerMedians.get(u.modelName()),
-                            unitOks.get(IssueComponent.SCANNER)),
-                    recyclerIssue(u, recycler.get(u.unitId()), recyclerMedians.get(u.modelName()),
-                            unitOks.get(IssueComponent.RECYCLER))));
+        units.forEach(u -> result.put(u.unitId(), new ArrayList<>()));
+        for (ComponentRule rule : props.components()) {
+            Map<Long, Counts> byUnit = new HashMap<>();
+            counts.getOrDefault(rule.id(), List.of()).forEach(c -> byUnit.put(c.unitId(), c));
+            Map<String, Double> medians = medianPerModel(units, u -> modelValue(rule, u, byUnit.get(u.unitId())));
+            Map<Long, LastOk> componentOks = oks.getOrDefault(rule.id(), Map.of());
+            for (UnitWindow u : units) {
+                result.get(u.unitId()).add(issueOf(rule, u, byUnit.get(u.unitId()), medians.get(u.modelName()),
+                        componentOks.get(u.unitId())));
+            }
         }
+        result.replaceAll((id, issues) -> List.copyOf(issues));
         return result;
     }
 
-    private ComponentIssue scannerIssue(UnitWindow u, ScannerCounts c, Double median, LastOk ok) {
-        RankingProperties.ScannerRule rule = props.scanner();
-        int reads = c == null ? 0 : (ok == null ? c.readsInWindow() : c.readsSinceOk());
-        int rejected = c == null ? 0 : (ok == null ? c.rejectedInWindow() : c.rejectedSinceOk());
-        Double share = reads > 0 ? (double) rejected / reads : null;
-        Double ratio = ratio(share, median);
-        boolean enoughData = reads >= rule.minReads();
-        boolean wrong = enoughData && rejected >= rule.minRejects() && ratio != null && ratio >= rule.ratio();
-        return issue(IssueComponent.SCANNER, IssueMetric.REJECT_SHARE, u, ok, wrong, share, median, ratio, reads,
-                enoughData);
+    /** The unit's value over its whole window for the model median; null when it must not count. */
+    private Double modelValue(ComponentRule rule, UnitWindow u, Counts c) {
+        if (rule.metric() == IssueMetric.SHARE) {
+            return c != null && c.workInWindow() >= rule.minWork()
+                    ? (double) c.problemsInWindow() / c.workInWindow()
+                    : null;
+        }
+        int problems = c == null ? 0 : c.problemsInWindow();
+        return u.exposureDays() >= baselineMinDays && u.exposureDays() > 0 ? problems / u.exposureDays() : null;
     }
 
-    private ComponentIssue recyclerIssue(UnitWindow u, RecyclerCounts c, Double median, LastOk ok) {
-        RankingProperties.RecyclerRule rule = props.recycler();
-        LocalDateTime since = countingSince(u, ok);
-        double exposureDays = ok == null
-                ? u.exposureDays()
-                : Math.max(0, Duration.between(since, u.computedAt()).getSeconds() / SECONDS_PER_DAY);
-        int faults = c == null ? 0 : (ok == null ? c.faultsInWindow() : c.faultsSinceOk());
-        Double rate = exposureDays > 0 ? faults / exposureDays : null;
-        Double ratio = ratio(rate, median);
-        boolean enoughData = exposureDays >= rule.minDays();
-        boolean wrong = enoughData && faults >= rule.minFaults() && ratio != null && ratio >= rule.ratio();
-        return issue(IssueComponent.RECYCLER, IssueMetric.FAULTS_PER_DAY, u, ok, wrong, rate, median, ratio, faults,
-                enoughData);
-    }
+    private ComponentIssue issueOf(ComponentRule rule, UnitWindow u, Counts c, Double median, LastOk ok) {
+        int problems = c == null ? 0 : (ok == null ? c.problemsInWindow() : c.problemsSinceOk());
+        Double value;
+        int sample;
+        boolean enoughData;
+        if (rule.metric() == IssueMetric.SHARE) {
+            int work = c == null ? 0 : (ok == null ? c.workInWindow() : c.workSinceOk());
+            value = work > 0 ? (double) problems / work : null;
+            sample = work;
+            enoughData = work >= rule.minWork();
+        } else {
+            double days = ok == null
+                    ? u.exposureDays()
+                    : Math.max(0, Duration.between(countingSince(u, ok), u.computedAt()).getSeconds() / SECONDS_PER_DAY);
+            value = days > 0 ? problems / days : null;
+            sample = problems;
+            enoughData = days >= rule.minDays();
+        }
+        Double ratio = value == null || median == null || median <= 0 ? null : value / median;
+        boolean wrong = enoughData && problems >= rule.minProblems() && ratio != null && ratio >= rule.ratio();
 
-    private ComponentIssue issue(IssueComponent component, IssueMetric metric, UnitWindow u, LastOk ok,
-                                 boolean wrong, Double value, Double median, Double ratio, int sample,
-                                 boolean enoughData) {
         IssueStatus status;
         if (!wrong) {
             status = IssueStatus.OK;
@@ -129,7 +121,7 @@ public final class IssueEngine {
         } else {
             status = IssueStatus.ACTIVE;
         }
-        return new ComponentIssue(component, status, metric, value, median, ratio, sample, enoughData,
+        return new ComponentIssue(rule.id(), status, rule.metric(), value, median, ratio, sample, enoughData,
                 countingSince(u, ok),
                 ok == null ? null : ok.at(), ok == null ? null : ok.by(), ok == null ? null : ok.note());
     }
@@ -141,10 +133,6 @@ public final class IssueEngine {
         }
         LocalDateTime dayAfterOk = ok.at().toLocalDate().plusDays(1).atStartOfDay();
         return dayAfterOk.isAfter(u.windowStart()) ? dayAfterOk : u.windowStart();
-    }
-
-    private static Double ratio(Double value, Double median) {
-        return value == null || median == null || median <= 0 ? null : value / median;
     }
 
     /** Median of the non-null values per model; models without any value are left out. */

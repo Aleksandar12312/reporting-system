@@ -15,13 +15,17 @@ import com.example.monitor.stats.StatsProperties;
 
 /**
  * Read-only SQL of the REST API. The numbers come from the statistics tables (unit_stats, model_stats,
- * unit_fault_daily), which the statistics job keeps up to date; only the event lists read the event table.
+ * unit_event_daily), which the statistics job keeps up to date; only the event lists read the event table.
+ * The component of an event (part) is event_source.part, read live; a fault without a part is {@value #OTHER_PART}.
  *
  * The window of a unit is the one the job used: from the day of unit_stats.window_start to the day of
  * unit_stats.computed_at. So the counts here always match the faults_in_window of unit_stats.
  */
 @Repository
 public class UnitReadRepository {
+
+    /** Part of a fault whose event_source.part is not set. */
+    public static final String OTHER_PART = "OTHER";
 
     private final JdbcTemplate jdbc;
     private final StatsProperties stats;
@@ -62,18 +66,24 @@ public class UnitReadRepository {
 
     /** Like {@link #loadPartCounts()}, but only one unit when unitId is given. */
     public List<PartCount> loadPartCounts(Long unitId) {
-        String unitFilter = unitId == null ? "" : " and d.unit_id = ?";
-        Object[] args = unitId == null ? new Object[0] : new Object[] {unitId};
+        List<Object> args = new ArrayList<>(stats.faultSources());
+        String unitFilter = "";
+        if (unitId != null) {
+            unitFilter = " and d.unit_id = ?";
+            args.add(unitId);
+        }
         return jdbc.query("""
-                select d.unit_id, d.part, sum(d.faults) as fault_count
-                from unit_fault_daily d
+                select d.unit_id, coalesce(es.part, '%s') as part, sum(d.event_count) as fault_count
+                from unit_event_daily d
                 join unit_stats us on us.unit_id = d.unit_id
-                where d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
-                """ + unitFilter + """
-                 group by d.unit_id, d.part
-                """,
+                left join event_source es on es.source = d.source
+                where d.source in (%s)
+                  and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
+                """.formatted(OTHER_PART, sourcePlaceholders()) + unitFilter + """
+                 group by d.unit_id, coalesce(es.part, '%s')
+                """.formatted(OTHER_PART),
                 (rs, rowNum) -> new PartCount(rs.getLong("unit_id"), rs.getString("part"), rs.getInt("fault_count")),
-                args);
+                args.toArray());
     }
 
     /** One row per model. */
@@ -99,29 +109,34 @@ public class UnitReadRepository {
 
     /** Faults of one unit by component and fault name in its window, most frequent first. */
     public List<FaultBreakdown> loadBreakdown(long unitId) {
+        List<Object> args = new ArrayList<>();
+        args.add(unitId);
+        args.addAll(stats.faultSources());
         List<FaultRow> rows = jdbc.query("""
-                select d.part, d.fault, sum(d.faults) as fault_count
-                from unit_fault_daily d
+                select coalesce(es.part, '%s') as part, d.source as fault, sum(d.event_count) as fault_count
+                from unit_event_daily d
                 join unit_stats us on us.unit_id = d.unit_id
-                where d.unit_id = ?
+                left join event_source es on es.source = d.source
+                where d.unit_id = ? and d.source in (%s)
                   and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
-                group by d.part, d.fault
-                order by fault_count desc, d.part, d.fault
-                """,
+                group by coalesce(es.part, '%s'), d.source
+                order by fault_count desc, 1, 2
+                """.formatted(OTHER_PART, sourcePlaceholders(), OTHER_PART),
                 (rs, rowNum) -> new FaultRow(rs.getString("part"), rs.getString("fault"), rs.getInt("fault_count")),
-                unitId);
+                args.toArray());
         return withPercentages(unitId, rows);
     }
 
     /** Units with the most faults of one kind in their window, most first; units without that fault are left out. */
     public List<FaultRanking> loadFaultRanking(String fault, int limit) {
         return jdbc.query("""
-                select u.id as unit_id, u.serial_number, t.model_name, us.exposure_days, sum(d.faults) as fault_count
-                from unit_fault_daily d
+                select u.id as unit_id, u.serial_number, t.model_name, us.exposure_days,
+                       sum(d.event_count) as fault_count
+                from unit_event_daily d
                 join unit_stats us on us.unit_id = d.unit_id
                 join unit u on u.id = d.unit_id
                 join unit_type t on t.id = u.unit_type_id
-                where d.fault = ?
+                where d.source = ?
                   and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
                 group by u.id, u.serial_number, t.model_name, us.exposure_days
                 order by fault_count desc, u.id
@@ -146,15 +161,16 @@ public class UnitReadRepository {
         args.add(unitId);
         String sourceFilter = "";
         if (faultsOnly) {
-            sourceFilter = " and source in (" + sourcePlaceholders() + ")";
+            sourceFilter = " and e.source in (" + sourcePlaceholders() + ")";
             args.addAll(stats.faultSources());
         }
         args.add(limit);
-        String sql = "select id, unit_id, event_time, type, placeholder, source from event where unit_id = ?"
-                + sourceFilter + " order by event_time desc, id desc limit ?";
+        String sql = "select e.id, e.unit_id, e.event_time, e.type, es.part, e.source from event e"
+                + " left join event_source es on es.source = e.source where e.unit_id = ?"
+                + sourceFilter + " order by e.event_time desc, e.id desc limit ?";
         return jdbc.query(sql, (rs, rowNum) -> new UnitEvent(
                 rs.getLong("id"), rs.getLong("unit_id"), rs.getObject("event_time", LocalDateTime.class),
-                rs.getString("type"), rs.getString("placeholder"), rs.getString("source")), args.toArray());
+                rs.getString("type"), rs.getString("part"), rs.getString("source")), args.toArray());
     }
 
     /** One line of the breakdown query, before the percentages are added. */

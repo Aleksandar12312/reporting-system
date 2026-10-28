@@ -14,14 +14,13 @@ import org.springframework.batch.repeat.RepeatStatus;
  * Step 1 of the job. Decides whether the statistics can be updated or must be built again from the start,
  * and fixes the last event id this run will read (events written while the job runs wait for the next run).
  *
- * The statistics are built again (all four tables emptied, every event read again) when:
+ * The statistics are built again (all statistics tables emptied, every event read again) when:
  * <ul>
  *   <li>there is no state row yet: the first run, or the stats tables were emptied by hand</li>
  *   <li>the state points past the newest event, or its check event is gone or different: the event table
  *       was re-created (re-seed)</li>
- *   <li>unit_fault_daily is empty although faults were already counted: the table was emptied by hand</li>
- *   <li>unit_scanner_daily is empty although scanner events were already counted: the table is new
- *       (first start after an upgrade) or was emptied by hand</li>
+ *   <li>unit_event_daily is empty although events were already counted: the table is new (first start after
+ *       the upgrade from unit_fault_daily / unit_scanner_daily) or was emptied by hand</li>
  * </ul>
  */
 public class PrepareStatsTasklet implements Tasklet {
@@ -75,11 +74,8 @@ public class PrepareStatsTasklet implements Tasklet {
         if (state.hasCheckEvent() && !stats.checkEventIsUnchanged(state)) {
             return Optional.of("event " + state.checkEventId() + " changed (event table re-created)");
         }
-        if (state.lastEventId() > 0 && stats.dailyTableIsEmpty() && stats.faultEventsExistUpTo(state.lastEventId())) {
-            return Optional.of("unit_fault_daily is empty although faults were already counted");
-        }
-        if (state.lastEventId() > 0 && stats.scannerTableIsEmpty() && stats.scannerEventsExistUpTo(state.lastEventId())) {
-            return Optional.of("unit_scanner_daily is empty although scanner events were already counted");
+        if (state.lastEventId() > 0 && stats.dailyTableIsEmpty() && stats.eventsExistUpTo(state.lastEventId())) {
+            return Optional.of("unit_event_daily is empty although events were already counted");
         }
         return Optional.empty();
     }

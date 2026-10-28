@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  *
  * @param enabled     false: the job, its schedule and the stats tables are not touched at all
  * @param refreshCron when to refresh the tables (UTC); the default runs 30 seconds after every mock tick
- * @param sliceSize   how many event ids one transaction of the unit_fault_daily step covers
+ * @param sliceSize   how many event ids one transaction of the unit_event_daily step covers
  * @param chunkSize   how many units one transaction of the unit_stats step writes
  * @param windowDays      how far back to look; a younger unit is observed since it was created
  * @param baselineMinDays only units with at least this many days of data are used for the model median

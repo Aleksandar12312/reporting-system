@@ -10,8 +10,7 @@ import org.springframework.batch.core.step.tasklet.Tasklet;
 import org.springframework.batch.repeat.RepeatStatus;
 
 /**
- * Step 2 of the job: adds the new fault events to unit_fault_daily and the new scanner events
- * (READ_NOTE, NOTE_REJECTED) to unit_scanner_daily.
+ * Step 2 of the job: adds the new events to unit_event_daily (per unit, day and event name).
  *
  * The new events are the ids after the state's last_event_id, up to the id fixed by step 1. They are read in
  * slices of {@code stats.slice-size} ids. Spring Batch calls this tasklet once per slice, each call in its own
@@ -19,14 +18,14 @@ import org.springframework.batch.repeat.RepeatStatus;
  * counts an event twice or loses one: the next run continues after the last committed slice.
  * On the first run (or after a rebuild) the slices simply start at id 0, so the full load is the same code.
  */
-public class UnitFaultDailyTasklet implements Tasklet {
+public class UnitEventDailyTasklet implements Tasklet {
 
-    private static final Logger log = LoggerFactory.getLogger(UnitFaultDailyTasklet.class);
+    private static final Logger log = LoggerFactory.getLogger(UnitEventDailyTasklet.class);
 
     private final StatsRepository stats;
     private final long sliceSize;
 
-    public UnitFaultDailyTasklet(StatsRepository stats, long sliceSize) {
+    public UnitEventDailyTasklet(StatsRepository stats, long sliceSize) {
         this.stats = stats;
         this.sliceSize = sliceSize;
     }
@@ -47,12 +46,10 @@ public class UnitFaultDailyTasklet implements Tasklet {
             return RepeatStatus.FINISHED;
         }
         long to = Math.min(toEventId, from + sliceSize);
-        // Both tables and the new state are committed together, so neither can count an event twice
-        int rows = stats.addFaultsToDaily(from, to);
-        int scannerRows = stats.addScannerToDaily(from, to);
+        // The slice and the new state are committed together, so an event is never counted twice
+        int rows = stats.addEventsToDaily(from, to);
         stats.saveState(to, runAt);
-        log.info("unit_fault_daily / unit_scanner_daily: events {}..{} added ({} / {} rows written)",
-                from + 1, to, rows, scannerRows);
+        log.info("unit_event_daily: events {}..{} added ({} rows written)", from + 1, to, rows);
         return to >= toEventId ? RepeatStatus.FINISHED : RepeatStatus.CONTINUABLE;
     }
 }

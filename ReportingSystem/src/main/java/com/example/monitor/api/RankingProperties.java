@@ -1,6 +1,10 @@
 package com.example.monitor.api;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
+import java.util.regex.Pattern;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
@@ -16,8 +20,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param criticalRatio rate at least this many times the model median: CRITICAL
  * @param partMinFaults fewer faults than this: too few to say whether one part is the problem
  * @param partShare     one component with at least this share of the faults: scope PART
- * @param scanner       when something is wrong with the scanner
- * @param recycler      when something is wrong with the recycler
+ * @param components    the parts of a machine that get their own message (SCANNER, RECYCLER ...), in the order the
+ *                      API returns them; left out = {@link #defaultComponents()}
  * @param recurringDays a problem that comes back within this many days after "marked OK" is RECURRING
  */
 @ConfigurationProperties(prefix = "ranking")
@@ -27,14 +31,8 @@ public record RankingProperties(
         @DefaultValue("4.0") double criticalRatio,
         @DefaultValue("8") int partMinFaults,
         @DefaultValue("0.5") double partShare,
-        @DefaultValue ScannerRule scanner,
-        @DefaultValue RecyclerRule recycler,
+        List<ComponentRule> components,
         @DefaultValue("14") int recurringDays) {
-
-    /** Default fault kinds of the recycler: payout errors and note jams. */
-    public static final List<String> DEFAULT_RECYCLER_FAULTS = List.of(
-            "ERROR_DURING_PAYOUT", "INCOMPLETE_PAYOUT", "INCOMPLETE_FLOAT", "PAYOUT_OUT_OF_SERVICE", "TIME_OUT",
-            "SAFE_NOTE_JAM", "UNSAFE_NOTE_JAM", "JAMMED");
 
     public RankingProperties {
         if (minFaults < 0) {
@@ -55,61 +53,82 @@ public record RankingProperties(
         if (recurringDays < 0) {
             throw new IllegalArgumentException("ranking.recurring-days must not be negative");
         }
-        scanner = scanner == null ? ScannerRule.defaults() : scanner;
-        recycler = recycler == null ? RecyclerRule.defaults() : recycler;
+        components = components == null || components.isEmpty() ? defaultComponents() : List.copyOf(components);
+        Set<String> ids = new HashSet<>();
+        for (ComponentRule c : components) {
+            if (!ids.add(c.id())) {
+                throw new IllegalArgumentException("ranking.components: id " + c.id() + " is used twice");
+            }
+        }
     }
 
     /** What an empty "ranking" section gives. */
     public static RankingProperties defaults() {
-        return new RankingProperties(3, 2.0, 4.0, 8, 0.5, ScannerRule.defaults(), RecyclerRule.defaults(), 14);
+        return new RankingProperties(3, 2.0, 4.0, 8, 0.5, defaultComponents(), 14);
     }
 
     /**
-     * Something is wrong with the scanner when its share of rejected notes is at least {@code ratio} times the
-     * median of its model, and it read and rejected enough notes to judge.
+     * SCANNER: share of rejected notes (NOTE_REJECTED / READ_NOTE).
+     * RECYCLER: faults per day of the FAULT events whose event_source.part is RECYCLER (payout errors, note jams).
      */
-    public record ScannerRule(
-            @DefaultValue("30") int minReads,
-            @DefaultValue("5") int minRejects,
+    public static List<ComponentRule> defaultComponents() {
+        return List.of(
+                new ComponentRule("SCANNER", IssueMetric.SHARE, List.of("READ_NOTE"), List.of("NOTE_REJECTED"),
+                        30, 3, 5, 2.0),
+                new ComponentRule("RECYCLER", IssueMetric.PER_DAY, List.of(), List.of(), 30, 3, 5, 2.0));
+    }
+
+    /**
+     * When something is wrong with one part of a machine (one entry of ranking.components).
+     * The unit's value is compared with the median of the units of the same model; something is wrong when it is
+     * at least {@code ratio} times the median and there is enough data to judge.
+     *
+     * @param id          name of the part, e.g. SCANNER; capital letters, digits and _, at most 20 characters.
+     *                    It is used in the URL of "mark as OK" and stored in unit_issue_ack.component
+     * @param metric      SHARE: problems / work. PER_DAY: problems per day
+     * @param work        SHARE only: event names that count the work (e.g. READ_NOTE); must not be empty
+     * @param problems    event names that count the problems (e.g. NOTE_REJECTED). Left out with PER_DAY: every
+     *                    FAULT event whose event_source.part equals the id
+     * @param minWork     SHARE: at least this many work events (in the window, or since "marked OK")
+     * @param minDays     PER_DAY: at least this many days of data (in the window, or since "marked OK")
+     * @param minProblems at least this many problem events
+     * @param ratio       value at least this many times the model median: something is wrong
+     */
+    public record ComponentRule(
+            String id,
+            @DefaultValue("PER_DAY") IssueMetric metric,
+            @DefaultValue List<String> work,
+            @DefaultValue List<String> problems,
+            @DefaultValue("30") int minWork,
+            @DefaultValue("3") int minDays,
+            @DefaultValue("5") int minProblems,
             @DefaultValue("2.0") double ratio) {
 
-        public ScannerRule {
-            if (minReads < 1 || minRejects < 0 || ratio <= 0) {
-                throw new IllegalArgumentException(
-                        "ranking.scanner: min-reads must be at least 1, min-rejects not negative, ratio positive");
+        private static final Pattern ID = Pattern.compile("[A-Z][A-Z0-9_]{0,19}");
+
+        public ComponentRule {
+            id = id == null ? "" : id.trim().toUpperCase(Locale.ROOT);
+            if (!ID.matcher(id).matches()) {
+                throw new IllegalArgumentException("ranking.components: id '" + id
+                        + "' must start with a letter and have only letters, digits and _ (at most 20 characters)");
+            }
+            metric = metric == null ? IssueMetric.PER_DAY : metric;
+            work = clean(work);
+            problems = clean(problems);
+            if (metric == IssueMetric.SHARE && (work.isEmpty() || problems.isEmpty())) {
+                throw new IllegalArgumentException("ranking.components " + id + ": metric SHARE needs work and problems");
+            }
+            if (minWork < 1 || minDays < 0 || minProblems < 0 || ratio <= 0) {
+                throw new IllegalArgumentException("ranking.components " + id
+                        + ": min-work must be at least 1, min-days and min-problems not negative, ratio positive");
             }
         }
 
-        public static ScannerRule defaults() {
-            return new ScannerRule(30, 5, 2.0);
-        }
-    }
-
-    /**
-     * Something is wrong with the recycler when its faults per day (of the given fault kinds) are at least
-     * {@code ratio} times the median of its model, with at least {@code minFaults} faults in at least
-     * {@code minDays} days.
-     */
-    public record RecyclerRule(
-            @DefaultValue("3") int minDays,
-            @DefaultValue("5") int minFaults,
-            @DefaultValue("2.0") double ratio,
-            @DefaultValue({"ERROR_DURING_PAYOUT", "INCOMPLETE_PAYOUT", "INCOMPLETE_FLOAT", "PAYOUT_OUT_OF_SERVICE",
-                    "TIME_OUT", "SAFE_NOTE_JAM", "UNSAFE_NOTE_JAM", "JAMMED"}) List<String> faults) {
-
-        public RecyclerRule {
-            if (minDays < 0 || minFaults < 0 || ratio <= 0) {
-                throw new IllegalArgumentException(
-                        "ranking.recycler: min-days and min-faults must not be negative, ratio must be positive");
+        private static List<String> clean(List<String> names) {
+            if (names == null) {
+                return List.of();
             }
-            if (faults == null || faults.isEmpty()) {
-                throw new IllegalArgumentException("ranking.recycler.faults must contain at least one value");
-            }
-            faults = List.copyOf(faults);
-        }
-
-        public static RecyclerRule defaults() {
-            return new RecyclerRule(3, 5, 2.0, DEFAULT_RECYCLER_FAULTS);
+            return names.stream().map(String::trim).filter(n -> !n.isEmpty()).distinct().toList();
         }
     }
 }

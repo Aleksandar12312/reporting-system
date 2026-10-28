@@ -68,11 +68,11 @@ class PrepareStatsTaskletTest {
     }
 
     @Test
-    void anEmptyDailyTableIsFineWhenThereAreNoFaultsAtAll() {
+    void anEmptyDailyTableIsFineWhenThereAreNoEventsAtAll() {
         stats.state = Optional.of(new EtlState(900, 900L, 3L, NOW));
         stats.maxEventId = 1_000;
         stats.dailyEmpty = true;
-        stats.faultEventsExist = false;
+        stats.eventsExist = false;
 
         assertThat(tasklet.rebuildReason(stats.state, stats.maxEventId)).isEmpty();
     }

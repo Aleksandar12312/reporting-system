@@ -7,7 +7,7 @@ import java.time.LocalDateTime;
  *
  * @param eventTime when it happened, in UTC (sent as "2026-10-26T12:00:48", without a zone)
  * @param type      event type (event.type), may be null
- * @param part      component (event.placeholder), may be null
+ * @param part      component of the event (event_source.part, e.g. SCANNER); null when it has none
  * @param source    what happened (event.source), for faults e.g. JAMMED
  */
 public record UnitEvent(long id, long unitId, LocalDateTime eventTime, String type, String part, String source) {

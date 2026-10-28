@@ -23,7 +23,8 @@ import org.springframework.web.bind.annotation.RestController;
  *   <li>GET /api/units/{unitId}/faults: faults of one unit by component and fault name</li>
  *   <li>GET /api/units/{unitId}/fault-events?limit=100: newest fault events of one unit</li>
  *   <li>GET /api/units/{unitId}/events?limit=100: newest events of one unit, of every kind</li>
- *   <li>POST /api/units/{unitId}/issues/{component}/ack: mark SCANNER or RECYCLER of a unit as OK</li>
+ *   <li>POST /api/units/{unitId}/issues/{component}/ack: mark one component (ranking.components, e.g. SCANNER)
+ *       of a unit as OK</li>
  *   <li>POST /api/units/{unitId}/issues/ack: mark every component that has a problem as OK</li>
  *   <li>GET /api/units/{unitId}/issues/history?limit=50: every "marked OK" of a unit, newest first</li>
  * </ul>
@@ -86,7 +87,7 @@ public class UnitsController {
     }
 
     @PostMapping("/{unitId}/issues/{component}/ack")
-    public UnitScore markOk(@PathVariable long unitId, @PathVariable IssueComponent component,
+    public UnitScore markOk(@PathVariable long unitId, @PathVariable String component,
                             @RequestBody(required = false) AckRequest body) {
         return service.markOk(unitId, component, body);
     }

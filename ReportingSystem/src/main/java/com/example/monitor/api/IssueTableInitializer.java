@@ -7,16 +7,21 @@ import org.springframework.boot.ApplicationRunner;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Component;
 
-/** Creates the table unit_issue_ack on start if it is missing (db/schema_issues.sql). */
+/**
+ * On start: creates the table unit_issue_ack if it is missing (db/schema_issues.sql) and checks
+ * ranking.components against event_source, so a wrong event name is in the log right away.
+ */
 @Component
 public class IssueTableInitializer implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(IssueTableInitializer.class);
 
     private final IssueRepository repository;
+    private final ComponentCatalog catalog;
 
-    public IssueTableInitializer(IssueRepository repository) {
+    public IssueTableInitializer(IssueRepository repository, ComponentCatalog catalog) {
         this.repository = repository;
+        this.catalog = catalog;
     }
 
     @Override
@@ -26,6 +31,13 @@ public class IssueTableInitializer implements ApplicationRunner {
         } catch (DataAccessException e) {
             // The API then answers 503 for these calls; everything else keeps working
             log.error("Could not create table unit_issue_ack", e);
+        }
+        try {
+            catalog.components().forEach(c -> log.info("Component {}: {} work={} problems={}",
+                    c.id(), c.metric(), c.work(), c.problems()));
+        } catch (RuntimeException e) {
+            // Every call that needs the components then fails with the same reason in the log
+            log.error("ranking.components cannot be used: {}", e.getMessage());
         }
     }
 }

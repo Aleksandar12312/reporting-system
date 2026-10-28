@@ -9,12 +9,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.batch.repeat.RepeatStatus;
 
 /** The new events are read in slices, and the state moves on with every slice. */
-class UnitFaultDailyTaskletTest {
+class UnitEventDailyTaskletTest {
 
     private static final LocalDateTime NOW = LocalDateTime.of(2026, 10, 27, 10, 0, 30);
 
     private final FakeStatsRepository stats = new FakeStatsRepository();
-    private final UnitFaultDailyTasklet tasklet = new UnitFaultDailyTasklet(stats, 500);
+    private final UnitEventDailyTasklet tasklet = new UnitEventDailyTasklet(stats, 500);
 
     @Test
     void aFullLoadIsReadInSlicesUntilTheLastEvent() {

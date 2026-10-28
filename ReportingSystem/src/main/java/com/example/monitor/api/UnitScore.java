@@ -11,10 +11,11 @@ import java.util.List;
  * @param ratePerDay      faults divided by exposure days
  * @param modelMedianRate median rate of the units of the same model; null if the model has no baseline unit
  * @param ratioToModel    ratePerDay divided by modelMedianRate; null if there is no usable median
- * @param topPart         component with the most faults; null if the unit has no faults
+ * @param topPart         component (event_source.part) with the most faults, OTHER for faults without a part;
+ *                        null if the unit has no faults
  * @param topPartShare    topPartFaults divided by faults (0 to 1); null if the unit has no faults
  * @param scope           PART or GENERAL for flagged units with enough faults, otherwise null
- * @param issues          one entry per component (SCANNER, RECYCLER): is something wrong with it
+ * @param issues          one entry per component of ranking.components: is something wrong with it
  */
 public record UnitScore(
         long unitId,

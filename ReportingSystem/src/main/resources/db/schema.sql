@@ -1,5 +1,5 @@
 -- Mock schema for the problematic-units project (MySQL 8)
--- Six tables: unit_type, address, location, unit, event_source, event
+-- Six tables: unit_type, address, location, unit, event_source (with the component of every event), event
 -- Running it again deletes ALL data (also the statistics tables, which the application then builds again).
 -- Remove the first two statements if your tool (e.g. Flyway) already uses a schema.
 CREATE DATABASE IF NOT EXISTS mock_lincstation;
@@ -8,8 +8,9 @@ USE mock_lincstation;
 -- Drop in reverse dependency order so the script can be re-run.
 -- The statistics tables hold numbers derived from event; the application creates and fills them again.
 DROP TABLE IF EXISTS unit_issue_ack;
-DROP TABLE IF EXISTS unit_scanner_daily;
-DROP TABLE IF EXISTS unit_fault_daily;
+DROP TABLE IF EXISTS unit_event_daily;
+DROP TABLE IF EXISTS unit_scanner_daily;   -- old, replaced by unit_event_daily
+DROP TABLE IF EXISTS unit_fault_daily;     -- old, replaced by unit_event_daily
 DROP TABLE IF EXISTS unit_stats;
 DROP TABLE IF EXISTS model_stats;
 DROP TABLE IF EXISTS stats_etl_state;
@@ -72,11 +73,15 @@ CREATE TABLE unit (
 --             STATUS     a change of state (start-up, reset, disabled, note cleared after power-up ...)
 --             OPERATION  normal work (reading, storing, paying out notes)
 --             COMMAND    a reply to a command of the host
+--   part      the component of the machine the event is about (SCANNER, RECYCLER ...); NULL = not assigned.
+--             Free text on purpose: a new component is an UPDATE of this column plus a block in
+--             ranking.components, no new table. The REST API shows a fault without a part as OTHER.
 CREATE TABLE event_source (
     source       VARCHAR(40)   NOT NULL,
     code         SMALLINT      NOT NULL,
     category     VARCHAR(10)   NOT NULL,
     description  VARCHAR(100)  NOT NULL,
+    part         VARCHAR(20)   NULL,
     PRIMARY KEY (source),
     UNIQUE KEY uq_event_source_code (code),
     KEY idx_event_source_category (category),
@@ -143,6 +148,17 @@ INSERT INTO event_source (code, source, category, description) VALUES
     (246, 'SOFTWARE_ERROR', 'FAULT', 'Software error in the unit'),
     (248, 'FAIL', 'FAULT', 'General failure'),
     (250, 'KEY_NOT_SET', 'WARNING', 'The encryption key is not set');
+
+-- Components of the events (event_source.part). For now only the scanner and the recycler;
+-- the coin, cashbox and system events stay NULL until they get a component of their own.
+UPDATE event_source SET part = 'SCANNER'
+WHERE source IN ('READ_NOTE', 'NOTE_REJECTING', 'NOTE_REJECTED', 'CREDIT_NOTE');
+
+UPDATE event_source SET part = 'RECYCLER'
+WHERE source IN ('ERROR_DURING_PAYOUT', 'INCOMPLETE_PAYOUT', 'INCOMPLETE_FLOAT', 'PAYOUT_OUT_OF_SERVICE', 'TIME_OUT',
+                 'SAFE_NOTE_JAM', 'UNSAFE_NOTE_JAM', 'JAMMED', 'JAM_RECOVERY',
+                 'DISPENSING', 'DISPENSED', 'HALTED', 'FLOATING', 'FLOATED', 'EMPTYING', 'EMPTIED',
+                 'SMART_EMPTYING', 'SMART_EMPTIED', 'NOTE_STORED_IN_PAYOUT', 'NOTE_FLOAT_REMOVED', 'NOTE_FLOAT_ATTACHED');
 
 -- Append-only log of everything a machine reports.
 -- Every row is standalone: there is no link between events (a JAM_RECOVERY is its own row).

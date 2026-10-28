@@ -29,7 +29,7 @@ import org.springframework.transaction.PlatformTransactionManager;
  * <pre>
  * statsRefreshJob
  *   1. prepareStatsStep    (tasklet)  rebuild from the start if needed; fix the last event id of this run
- *   2. unitFaultDailyStep  (tasklet)  add the new fault events to unit_fault_daily, slice by slice
+ *   2. unitEventDailyStep  (tasklet)  add the new events to unit_event_daily, slice by slice
  *   3. unitStatsStep       (chunk)    reader: every unit with its faults, processor: window and rate,
  *                                     writer: upsert into unit_stats (a new unit gets its row here)
  *   4. modelStatsStep      (tasklet)  median and mean per model into model_stats
@@ -58,11 +58,11 @@ public class StatsJobConfig {
     }
 
     @Bean
-    public Job statsRefreshJob(JobRepository jobRepository, Step prepareStatsStep, Step unitFaultDailyStep,
+    public Job statsRefreshJob(JobRepository jobRepository, Step prepareStatsStep, Step unitEventDailyStep,
                                Step unitStatsStep, Step modelStatsStep) {
         return new JobBuilder(JOB_NAME, jobRepository)
                 .start(prepareStatsStep)
-                .next(unitFaultDailyStep)
+                .next(unitEventDailyStep)
                 .next(unitStatsStep)
                 .next(modelStatsStep)
                 .build();
@@ -77,10 +77,10 @@ public class StatsJobConfig {
     }
 
     @Bean
-    public Step unitFaultDailyStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
+    public Step unitEventDailyStep(JobRepository jobRepository, PlatformTransactionManager transactionManager,
                                    StatsRepository stats, StatsProperties props) {
-        return new StepBuilder("unitFaultDailyStep", jobRepository)
-                .tasklet(new UnitFaultDailyTasklet(stats, props.sliceSize()), transactionManager)
+        return new StepBuilder("unitEventDailyStep", jobRepository)
+                .tasklet(new UnitEventDailyTasklet(stats, props.sliceSize()), transactionManager)
                 .build();
     }
 
@@ -111,12 +111,13 @@ public class StatsJobConfig {
     @Bean
     @StepScope
     public JdbcCursorItemReader<UnitFaultTotals> unitFaultTotalsReader(
-            DataSource dataSource, StatsProperties props, @Value("#{jobParameters['runAt']}") LocalDateTime runAt) {
+            DataSource dataSource, StatsProperties props, StatsRepository stats,
+            @Value("#{jobParameters['runAt']}") LocalDateTime runAt) {
         return new JdbcCursorItemReaderBuilder<UnitFaultTotals>()
                 .name("unitFaultTotalsReader")
                 .dataSource(dataSource)
-                .sql(StatsRepository.UNIT_TOTALS_SQL)
-                .queryArguments(runAt.minusDays(props.windowDays()), runAt.toLocalDate())
+                .sql(stats.unitTotalsSql())
+                .queryArguments(stats.unitTotalsArgs(runAt.minusDays(props.windowDays()), runAt.toLocalDate()))
                 .rowMapper((rs, rowNum) -> new UnitFaultTotals(
                         rs.getLong("unit_id"),
                         rs.getLong("unit_type_id"),

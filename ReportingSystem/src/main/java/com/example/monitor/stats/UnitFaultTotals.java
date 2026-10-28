@@ -4,7 +4,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 /**
- * One unit as read from unit + unit_fault_daily (input of the unit_stats step).
+ * One unit as read from unit + unit_event_daily (its faults) (input of the unit_stats step).
  *
  * @param unitId         the unit
  * @param unitTypeId     its model

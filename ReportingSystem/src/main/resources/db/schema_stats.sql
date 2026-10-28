@@ -2,38 +2,34 @@
 -- (package com.example.monitor.stats).
 --
 -- The application runs this script itself on every start, so you do not have to.
--- Every statement is CREATE TABLE IF NOT EXISTS: running it again never removes data.
+-- Every CREATE is CREATE TABLE IF NOT EXISTS: running it again never removes data of the current tables
+-- (only the two old tables replaced by unit_event_daily are dropped).
 -- To run it by hand in Workbench, first make mock_lincstation the default schema (double-click it).
 --
 -- No foreign keys on purpose: these tables hold derived numbers only, and foreign keys would stop
 -- schema.sql from dropping unit/unit_type when the mock data is created again.
 
--- Faults per unit, day (UTC day of event.event_time), component (event.placeholder, 'UNKNOWN' when empty)
--- and fault name (event.source). Only the stats.fault-sources are counted.
-CREATE TABLE IF NOT EXISTS unit_fault_daily (
-    unit_id     BIGINT       NOT NULL,
-    event_date  DATE         NOT NULL,
-    part        VARCHAR(40)  NOT NULL,
-    fault       VARCHAR(40)  NOT NULL,
-    faults      INT          NOT NULL,
-    PRIMARY KEY (unit_id, event_date, part, fault),
-    KEY idx_ufd_date (event_date),
-    KEY idx_ufd_fault_unit (fault, unit_id)
-) ENGINE = InnoDB;
+-- Replaced by unit_event_daily (one table for every kind of event). They held derived numbers only.
+DROP TABLE IF EXISTS unit_fault_daily;
+DROP TABLE IF EXISTS unit_scanner_daily;
 
--- Scanner activity per unit and day (UTC day of event.event_time): notes read (READ_NOTE) and
--- notes rejected (NOTE_REJECTED). The REST API compares the reject share with the model's median.
-CREATE TABLE IF NOT EXISTS unit_scanner_daily (
-    unit_id         BIGINT  NOT NULL,
-    event_date      DATE    NOT NULL,
-    notes_read      INT     NOT NULL,
-    notes_rejected  INT     NOT NULL,
-    PRIMARY KEY (unit_id, event_date),
-    KEY idx_usd_date (event_date)
+-- Events per unit, day (UTC day of event.event_time) and event name (event.source): every event that has a
+-- source is counted, not only the faults. Faults, scanner reads and rejects, payouts ... are all rows here,
+-- so a new component (ranking.components) never needs a new table and never a rebuild.
+-- Which component an event belongs to is NOT stored here: it comes from event_source.part, joined when reading,
+-- so changing event_source.part takes effect immediately.
+CREATE TABLE IF NOT EXISTS unit_event_daily (
+    unit_id      BIGINT       NOT NULL,
+    event_date   DATE         NOT NULL,
+    source       VARCHAR(40)  NOT NULL,
+    event_count  INT          NOT NULL,
+    PRIMARY KEY (unit_id, event_date, source),
+    KEY idx_ued_source_date (source, event_date),
+    KEY idx_ued_date (event_date)
 ) ENGINE = InnoDB;
 
 -- One row per unit, also for a unit without faults. The window is the last stats.window-days days,
--- or shorter for a younger unit; faults are counted from the first day of the window.
+-- or shorter for a younger unit; faults (stats.fault-sources) are counted from the first day of the window.
 CREATE TABLE IF NOT EXISTS unit_stats (
     unit_id           BIGINT    NOT NULL,
     unit_type_id      BIGINT    NOT NULL,
@@ -63,7 +59,7 @@ CREATE TABLE IF NOT EXISTS model_stats (
     PRIMARY KEY (unit_type_id)
 ) ENGINE = InnoDB;
 
--- One row (id = 1): every event with an id up to last_event_id is counted in unit_fault_daily.
+-- One row (id = 1): every event with an id up to last_event_id is counted in unit_event_daily.
 -- check_* is the newest of those events; if it disappears or changes, the event table was re-created
 -- and the job builds all statistics again from the start.
 CREATE TABLE IF NOT EXISTS stats_etl_state (

@@ -2,8 +2,7 @@
 -- After this, the next run of the job (at the latest 5 minutes later, or at the next start) counts every event again.
 USE mock_lincstation;
 
-TRUNCATE TABLE unit_fault_daily;
-TRUNCATE TABLE unit_scanner_daily;
+TRUNCATE TABLE unit_event_daily;
 TRUNCATE TABLE unit_stats;
 TRUNCATE TABLE model_stats;
 TRUNCATE TABLE stats_etl_state;

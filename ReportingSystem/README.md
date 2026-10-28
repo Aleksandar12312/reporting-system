@@ -16,7 +16,9 @@ On the first start the generator creates 200 units and 90 days of history. After
 Every event comes from the bill recycler of the machine (`type = PLACEHOLDER`, `placeholder = RC`), and its
 `source` is a name from the generic recycler event list (58 events, codes 176-250). The list is in the table
 `event_source` (with a category: FAULT, WARNING, STATUS, OPERATION, COMMAND) and in the Java enum
-`recycler.RecyclerEvent`; keep both equal. `event.source` has a foreign key to `event_source`, so a misspelled name is
+`recycler.RecyclerEvent`; keep both equal. `event_source.part` says which component of the machine an event is
+about (for now `SCANNER` and `RECYCLER`; `NULL` = not assigned). It is only in the database, so it can be changed
+with an `UPDATE` at any time. `event.source` has a foreign key to `event_source`, so a misspelled name is
 refused. Per unit and day the generator sends about 10 customer transactions (`transactions-per-day`, a deposit is
 about 4 events, a payout 2), 2 warnings/state changes (`status-events-per-day`) and the faults of its model and profile:
 about 35 events per unit per day, ~620,000 events for the 90-day history. Command replies and coin/ticket events are
@@ -31,6 +33,8 @@ New profiles only appear after a re-seed (see below); an existing database keeps
 Re-run `schema.sql` and `schema_mock_key.sql`, then start the app again. `schema.sql` also drops the statistics
 tables; the app creates and fills them again. To keep an existing database instead, run
 `db/migrate_recycler_events.sql` (widens the text columns, adds `event_source`, deletes the old non-recycler events).
+An existing database from before the column `event_source.part` needs `db/migrate_event_parts.sql` once (adds the
+column and fills it for SCANNER and RECYCLER); the app tells you in the log when it is missing.
 Set `mock.enabled: false` to switch the whole generator off.
 
 ## REST API (package `api`)
@@ -48,12 +52,16 @@ the event lists are read live from `event`.
 - `/api/units/{unitId}/fault-events?limit=100`: newest fault events of one unit
 - `/api/units/{unitId}/events?limit=100`: newest events of one unit, of every kind
 
-- `/api/summary`: `{computedAt, windowDays, unitCount, tiers}`, for the dashboard cards and "Updated hh:mm"
+- `/api/summary`: `{computedAt, windowDays, unitCount, tiers, issues}`, for the dashboard cards and "Updated hh:mm"
+  (`issues`: units with a problem per component)
 - `/api/models`: one row per model from `model_stats`
 - `/api/fault-kinds`: the fault kinds that are counted (`stats.fault-sources`)
+- `/api/components`: the components that get their own message (`ranking.components`), in order, with their rule
+  and resolved event names; a front end can build one tab per component from it
 
 - `POST /api/units/{unitId}/issues/{component}/ack` with `{"by": "Marko", "note": "scanner cleaned"}`:
-  mark `SCANNER` or `RECYCLER` of a unit as OK; answers with the unit as it is now
+  mark one component of a unit (an id of `ranking.components`, e.g. `SCANNER`) as OK; answers with the unit as it is
+  now (400 for an unknown component)
 - `POST /api/units/{unitId}/issues/ack`: the same for every component that has a problem now
 - `/api/units/{unitId}/issues/history?limit=50`: every "marked OK" of a unit, newest first
 
@@ -62,14 +70,18 @@ The two POST calls are the only calls that write; they write only to `unit_issue
 
 ### Component messages (`issues`)
 
-Every unit in the API has `issues`: one entry per component, `SCANNER` and `RECYCLER`, with
-`status` `OK`, `ACTIVE` (something is wrong) or `RECURRING` (wrong again within `ranking.recurring-days`
-after it was marked OK). `IssueEngine` decides, with the thresholds in `ranking.scanner` and `ranking.recycler`:
+Every unit in the API has `issues`: one entry per component of `ranking.components` (now `SCANNER` and
+`RECYCLER`, in that order), with `status` `OK`, `ACTIVE` (something is wrong) or `RECURRING` (wrong again within
+`ranking.recurring-days` after it was marked OK). `IssueEngine` compares the unit with the median of its model:
 
-- **Scanner:** share of rejected notes (`NOTE_REJECTED / READ_NOTE`, from `unit_scanner_daily`) at least
-  2 x the median of the model, with at least 30 notes read and 5 rejected
-- **Recycler:** faults per day of the payout and jam faults (`ranking.recycler.faults`) at least 2 x the median of
-  the model, with at least 5 faults in at least 3 days
+- `metric: SHARE`: problems / work (scanner: `NOTE_REJECTED / READ_NOTE`) at least `ratio` x the median, with at
+  least `min-work` work and `min-problems` problem events
+- `metric: PER_DAY`: problem events per day (recycler: every FAULT event with `event_source.part = RECYCLER`, i.e.
+  payout errors and note jams) at least `ratio` x the median, with at least `min-problems` in at least `min-days` days
+
+The counts come from `unit_event_daily`. **A new component** (e.g. coins) = set `event_source.part` for its events,
+add a block to `ranking.components` and restart: no new table, no new code, no rebuild (every event is already
+counted). Every event name of the YAML must exist in `event_source`; a wrong name is reported in the log on start.
 
 "Marked OK" is stored in `unit_issue_ack` (created by the app, `db/schema_issues.sql`, never touched by a statistics
 rebuild). After it, only the days after that day count for that unit and component, so old data cannot bring the
@@ -78,6 +90,7 @@ message back; the model medians always use every unit's whole window.
 The tier of the fault rate is raised to at least WATCH while a unit has a SCANNER or RECYCLER message that is
 ACTIVE or RECURRING (OK and NO_BASELINE become WATCH; WATCH and CRITICAL stay). So such a unit is in
 `/problematic`, in the WATCH count of `/summary` and in `?tier=WATCH`. Rate, ratio and scope stay those of the faults.
+`topPart` and the part of `/faults` and the event lists are `event_source.part` (`OTHER` for a fault without one).
 Marking the component as OK brings the tier of the fault rate back.
 
 Tier and scope are decided by `RankingEngine` from the `ranking:` block of `application-dev.yml`
@@ -89,13 +102,14 @@ Tests: `mvn test`.
 
 ## Statistics tables (package `stats`, Spring Batch)
 
-The job `statsRefreshJob` keeps five tables up to date, so large amounts of data do not have to be counted again
+The job `statsRefreshJob` keeps four tables up to date, so large amounts of data do not have to be counted again
 for every question:
 
-- `unit_fault_daily`: faults per unit, day, component and fault name
+- `unit_event_daily`: events per unit, day and event name, for every event (faults, notes read and rejected,
+  payouts ...). Faults, tier, the component messages and the fault lists are all read from it. Which component an
+  event belongs to is joined from `event_source.part` when reading, so it is not stored here
 - `unit_stats`: one row per unit (also a new unit without faults): faults and rate in the window, total faults, last fault day
 - `model_stats`: one row per model: unit counts, faults, median and mean faults per day of the baseline units
-- `unit_scanner_daily`: notes read and notes rejected per unit and day (for the scanner message)
 - `stats_etl_state`: the id of the last event already counted
 
 Window, baseline and fault sources come from the `stats:` block. The window is counted in whole days (from the first day of the window).
@@ -105,13 +119,14 @@ When it runs: once when the app is ready (after the mock seeder), then on `stats
 
 1. `prepareStatsStep`: if the tables are empty, or the event table was re-created (re-seed), everything is built
    again from the start; otherwise only the new events are read
-2. `unitFaultDailyStep`: the new fault events are added to `unit_fault_daily` and the new READ_NOTE / NOTE_REJECTED
-   events to `unit_scanner_daily`, `stats.slice-size` event ids per transaction
+2. `unitEventDailyStep`: the new events are added to `unit_event_daily`, `stats.slice-size` event ids per transaction
    (the counting and the new last event id are committed together, so a crash never counts an event twice)
 3. `unitStatsStep`: reader / processor / writer, one `unit_stats` row per unit
 4. `modelStatsStep`: `model_stats` calculated again (one row per model)
 
-The app creates the tables itself (`db/schema_stats.sql`) and Spring Boot creates the Spring Batch tables (`BATCH_...`).
+The app creates the tables itself (`db/schema_stats.sql`; it also drops the old `unit_fault_daily` and
+`unit_scanner_daily`, which `unit_event_daily` replaced, and then builds the statistics once from the event table)
+and Spring Boot creates the Spring Batch tables (`BATCH_...`).
 Useful scripts: `db/stats_checks.sql` (read-only checks, last job runs), `db/stats_reset.sql` (forces a full rebuild).
 Settings: the `stats:` block of `application-dev.yml`; `stats.enabled: false` switches the whole job off.
 

@@ -1,5 +1,6 @@
 package com.example.monitor.stats;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collections;
 import java.util.List;
@@ -16,8 +17,7 @@ import org.springframework.stereotype.Repository;
  * All SQL of the statistics ETL. The tables are created by db/schema_stats.sql.
  *
  * <ul>
- *   <li>unit_fault_daily: faults per unit, day, component and fault name</li>
- *   <li>unit_scanner_daily: notes read and notes rejected per unit and day</li>
+ *   <li>unit_event_daily: events per unit, day and event name (every event with a source, not only faults)</li>
  *   <li>unit_stats: one row per unit (faults and rate in the window)</li>
  *   <li>model_stats: one row per model (median and mean rate)</li>
  *   <li>stats_etl_state: one row, the id of the last event already counted</li>
@@ -28,11 +28,6 @@ import org.springframework.stereotype.Repository;
 public class StatsRepository {
 
     static final String SCHEMA_SCRIPT = "db/schema_stats.sql";
-    private static final String UNKNOWN_PART = "UNKNOWN";
-    /** event.source of a note being read by the scanner. */
-    static final String READ_NOTE = "READ_NOTE";
-    /** event.source of a note the scanner refused. */
-    static final String NOTE_REJECTED = "NOTE_REJECTED";
 
     private final JdbcTemplate jdbc;
     private final List<String> faultSources;
@@ -47,7 +42,8 @@ public class StatsRepository {
     // ------------------------------------------------------------------ tables
 
     /**
-     * Creates the four tables if they are missing. A model_stats table from the first version of the script
+     * Creates the tables if they are missing and drops the old unit_fault_daily / unit_scanner_daily
+     * (replaced by unit_event_daily). A model_stats table from the first version of the script
      * (without mean_rate_per_day) is dropped and created again; it holds only derived numbers.
      */
     public void createTablesIfMissing() {
@@ -113,29 +109,15 @@ public class StatsRepository {
         return found != null && found > 0;
     }
 
-    public boolean scannerTableIsEmpty() {
-        Integer any = jdbc.queryForObject("select exists(select 1 from unit_scanner_daily)", Integer.class);
-        return any == null || any == 0;
-    }
-
-    /** True when at least one READ_NOTE or NOTE_REJECTED event has an id up to {@code eventId}. */
-    public boolean scannerEventsExistUpTo(long eventId) {
-        Integer any = jdbc.queryForObject(
-                "select exists(select 1 from event where id <= ? and source in (?, ?))",
-                Integer.class, eventId, READ_NOTE, NOTE_REJECTED);
-        return any != null && any > 0;
-    }
-
     public boolean dailyTableIsEmpty() {
-        Integer any = jdbc.queryForObject("select exists(select 1 from unit_fault_daily)", Integer.class);
+        Integer any = jdbc.queryForObject("select exists(select 1 from unit_event_daily)", Integer.class);
         return any == null || any == 0;
     }
 
-    /** True when at least one fault event has an id up to {@code eventId}. */
-    public boolean faultEventsExistUpTo(long eventId) {
+    /** True when at least one event with a source has an id up to {@code eventId}. */
+    public boolean eventsExistUpTo(long eventId) {
         Integer any = jdbc.queryForObject(
-                "select exists(select 1 from event where id <= ? and source in (" + sourcePlaceholders + "))",
-                Integer.class, withSources(eventId));
+                "select exists(select 1 from event where id <= ? and source is not null)", Integer.class, eventId);
         return any != null && any > 0;
     }
 
@@ -144,8 +126,7 @@ public class StatsRepository {
      * DELETE instead of TRUNCATE on purpose: TRUNCATE would commit the transaction in the middle of the step.
      */
     public void deleteAllStats() {
-        jdbc.update("delete from unit_fault_daily");
-        jdbc.update("delete from unit_scanner_daily");
+        jdbc.update("delete from unit_event_daily");
         jdbc.update("delete from unit_stats");
         jdbc.update("delete from model_stats");
         jdbc.update("delete from stats_etl_state");
@@ -156,72 +137,53 @@ public class StatsRepository {
         return jdbc.update("delete s from unit_stats s left join unit u on u.id = s.unit_id where u.id is null");
     }
 
-    // ------------------------------------------------------------------ unit_fault_daily
+    // ------------------------------------------------------------------ unit_event_daily
 
     /**
-     * Extract, transform and load in one statement: the fault events with an id in (fromId, toId] are grouped by
-     * unit, day, component and fault name and added to unit_fault_daily (a new row, or added to the existing one).
+     * Extract, transform and load in one statement: the events with an id in (fromId, toId] are grouped by
+     * unit, day and event name and added to unit_event_daily (a new row, or added to the existing one).
+     * Every event with a source is counted, so a new component never needs a rebuild.
      *
      * @return rows inserted or changed, as MySQL reports them (a changed row counts as 2)
      */
-    public int addFaultsToDaily(long fromId, long toId) {
-        String sql = """
-                insert into unit_fault_daily (unit_id, event_date, part, fault, faults)
-                select n.unit_id, n.event_date, n.part, n.fault, n.faults
-                from (
-                    select e.unit_id, date(e.event_time) as event_date,
-                           coalesce(e.placeholder, '%s') as part, e.source as fault, count(*) as faults
-                    from event e
-                    where e.id > ? and e.id <= ? and e.source in (%s)
-                    group by e.unit_id, date(e.event_time), coalesce(e.placeholder, '%s'), e.source
-                ) n
-                on duplicate key update faults = unit_fault_daily.faults + n.faults
-                """.formatted(UNKNOWN_PART, sourcePlaceholders, UNKNOWN_PART);
-        return jdbc.update(sql, withSources(fromId, toId));
-    }
-
-    // ------------------------------------------------------------------ unit_scanner_daily
-
-    /**
-     * Like {@link #addFaultsToDaily(long, long)}, for the scanner: the READ_NOTE and NOTE_REJECTED events with an id
-     * in (fromId, toId] are counted per unit and day and added to unit_scanner_daily.
-     *
-     * @return rows inserted or changed, as MySQL reports them (a changed row counts as 2)
-     */
-    public int addScannerToDaily(long fromId, long toId) {
+    public int addEventsToDaily(long fromId, long toId) {
         return jdbc.update("""
-                insert into unit_scanner_daily (unit_id, event_date, notes_read, notes_rejected)
-                select n.unit_id, n.event_date, n.notes_read, n.notes_rejected
+                insert into unit_event_daily (unit_id, event_date, source, event_count)
+                select n.unit_id, n.event_date, n.source, n.event_count
                 from (
-                    select e.unit_id, date(e.event_time) as event_date,
-                           sum(e.source = ?) as notes_read, sum(e.source = ?) as notes_rejected
+                    select e.unit_id, date(e.event_time) as event_date, e.source, count(*) as event_count
                     from event e
-                    where e.id > ? and e.id <= ? and e.source in (?, ?)
-                    group by e.unit_id, date(e.event_time)
+                    where e.id > ? and e.id <= ? and e.source is not null
+                    group by e.unit_id, date(e.event_time), e.source
                 ) n
-                on duplicate key update notes_read = unit_scanner_daily.notes_read + n.notes_read,
-                    notes_rejected = unit_scanner_daily.notes_rejected + n.notes_rejected
-                """, READ_NOTE, NOTE_REJECTED, fromId, toId, READ_NOTE, NOTE_REJECTED);
+                on duplicate key update event_count = unit_event_daily.event_count + n.event_count
+                """, fromId, toId);
     }
 
     // ------------------------------------------------------------------ unit_stats
 
     /**
-     * Reader query of the unit_stats step: every unit with its faults from unit_fault_daily.
-     * Parameters: 1 = start of the longest window (now - window-days), 2 = today.
-     * A unit younger than the window counts from its creation day.
+     * Reader query of the unit_stats step: every unit with its faults (stats.fault-sources) from unit_event_daily.
+     * A unit younger than the window counts from its creation day. Parameters: {@link #unitTotalsArgs}.
      */
-    public static final String UNIT_TOTALS_SQL = """
-            select u.id as unit_id, u.unit_type_id, u.creation_date,
-                   coalesce(sum(case when d.event_date >= date(greatest(?, u.creation_date)) and d.event_date <= ?
-                                     then d.faults else 0 end), 0) as faults_in_window,
-                   coalesce(sum(d.faults), 0) as total_faults,
-                   max(d.event_date) as last_fault_date
-            from unit u
-            left join unit_fault_daily d on d.unit_id = u.id
-            group by u.id, u.unit_type_id, u.creation_date
-            order by u.id
-            """;
+    public String unitTotalsSql() {
+        return """
+                select u.id as unit_id, u.unit_type_id, u.creation_date,
+                       coalesce(sum(case when d.event_date >= date(greatest(?, u.creation_date)) and d.event_date <= ?
+                                         then d.event_count else 0 end), 0) as faults_in_window,
+                       coalesce(sum(d.event_count), 0) as total_faults,
+                       max(d.event_date) as last_fault_date
+                from unit u
+                left join unit_event_daily d on d.unit_id = u.id and d.source in (%s)
+                group by u.id, u.unit_type_id, u.creation_date
+                order by u.id
+                """.formatted(sourcePlaceholders);
+    }
+
+    /** Parameters of {@link #unitTotalsSql()}: start of the longest window (now - window-days), today, fault sources. */
+    public Object[] unitTotalsArgs(LocalDateTime windowStart, LocalDate today) {
+        return withSources(windowStart, today);
+    }
 
     /** Inserts or replaces the rows of the given units. */
     public void saveUnitStats(List<? extends UnitStats> rows) {

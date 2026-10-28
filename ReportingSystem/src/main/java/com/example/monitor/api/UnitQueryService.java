@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -11,6 +12,8 @@ import java.util.Map;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.example.monitor.api.ComponentCatalog.ComponentDefinition;
+import com.example.monitor.api.IssueEngine.Counts;
 import com.example.monitor.stats.StatsProperties;
 
 /**
@@ -29,17 +32,16 @@ public class UnitQueryService {
     private final RankingEngine engine;
     private final IssueRepository issueRepository;
     private final IssueEngine issueEngine;
+    private final ComponentCatalog catalog;
 
     public UnitQueryService(UnitReadRepository repository, StatsProperties stats, RankingProperties ranking,
-                            IssueRepository issueRepository) {
+                            IssueRepository issueRepository, ComponentCatalog catalog) {
         this.repository = repository;
         this.stats = stats;
         this.engine = new RankingEngine(ranking);
         this.issueRepository = issueRepository;
         this.issueEngine = new IssueEngine(ranking, stats.baselineMinDays());
-        if (!stats.faultSources().containsAll(ranking.recycler().faults())) {
-            throw new IllegalArgumentException("ranking.recycler.faults must all be in stats.fault-sources");
-        }
+        this.catalog = catalog;
     }
 
     /** Every unit, highest ratio first, with its component messages. */
@@ -52,15 +54,22 @@ public class UnitQueryService {
 
     /** Component messages of every unit (the model medians need all units, also for one unit). */
     private Map<Long, List<ComponentIssue>> evaluateIssues() {
-        return issueEngine.evaluate(issueRepository.loadUnitWindows(), issueRepository.loadScannerCounts(),
-                issueRepository.loadRecyclerCounts(), issueRepository.loadLastOks());
+        Map<String, List<Counts>> counts = new LinkedHashMap<>();
+        for (ComponentDefinition component : catalog.components()) {
+            counts.put(component.id(), issueRepository.loadCounts(component));
+        }
+        return issueEngine.evaluate(issueRepository.loadUnitWindows(), counts, issueRepository.loadLastOks());
     }
 
-    /** Marks one component of a unit as OK; returns the unit as it is now. 404 if the unit is unknown. */
-    public UnitScore markOk(long unitId, IssueComponent component, AckRequest request) {
+    /**
+     * Marks one component of a unit as OK; returns the unit as it is now.
+     * 404 if the unit is unknown, 400 if the component is not in ranking.components.
+     */
+    public UnitScore markOk(long unitId, String component, AckRequest request) {
         getUnitScore(unitId);
+        String id = catalog.require(component).id();
         String[] byAndNote = checkAck(request);
-        issueRepository.insertAck(unitId, component, nowUtc(), byAndNote[0], byAndNote[1]);
+        issueRepository.insertAck(unitId, id, nowUtc(), byAndNote[0], byAndNote[1]);
         return getUnitScore(unitId);
     }
 
@@ -123,14 +132,14 @@ public class UnitQueryService {
         for (Tier tier : Tier.values()) {
             tiers.put(tier, 0);
         }
-        Map<IssueComponent, Integer> issues = new EnumMap<>(IssueComponent.class);
-        for (IssueComponent component : IssueComponent.values()) {
-            issues.put(component, 0);
+        Map<String, Integer> issues = new LinkedHashMap<>();
+        for (ComponentDefinition component : catalog.components()) {
+            issues.put(component.id(), 0);
         }
         for (UnitScore score : scores) {
             tiers.merge(score.tier(), 1, Integer::sum);
             for (ComponentIssue issue : score.issues()) {
-                if (issue.status() != IssueStatus.OK) {
+                if (issue.status() != IssueStatus.OK && issues.containsKey(issue.component())) {
                     issues.merge(issue.component(), 1, Integer::sum);
                 }
             }
@@ -141,6 +150,11 @@ public class UnitQueryService {
     /** One row per model. */
     public List<ModelStatsRow> getModels() {
         return repository.loadModelStats();
+    }
+
+    /** The components that get their own message (ranking.components), with their resolved event names. */
+    public List<ComponentDefinition> getComponents() {
+        return catalog.components();
     }
 
     /** The fault kinds the system counts, in the configured order. */

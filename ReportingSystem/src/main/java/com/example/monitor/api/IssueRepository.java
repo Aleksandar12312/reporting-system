@@ -10,15 +10,15 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.init.ResourceDatabasePopulator;
 import org.springframework.stereotype.Repository;
 
+import com.example.monitor.api.ComponentCatalog.ComponentDefinition;
+import com.example.monitor.api.IssueEngine.Counts;
 import com.example.monitor.api.IssueEngine.LastOk;
-import com.example.monitor.api.IssueEngine.RecyclerCounts;
-import com.example.monitor.api.IssueEngine.ScannerCounts;
 import com.example.monitor.api.IssueEngine.UnitWindow;
 
 /**
- * SQL of the component messages (scanner, recycler) and of "marked as OK".
- * The counts come from the statistics tables, in the window of unit_stats (whole days, as the statistics job
- * counts them). "Since OK" counts only the days after the day of the newest "marked OK".
+ * SQL of the component messages (ranking.components) and of "marked as OK".
+ * The counts come from unit_event_daily, in the window of unit_stats (whole days, as the statistics job
+ * counts them). "Since OK" counts only the days after the day of the newest "marked OK" of that component.
  */
 @Repository
 public class IssueRepository {
@@ -26,11 +26,9 @@ public class IssueRepository {
     static final String SCHEMA_SCRIPT = "db/schema_issues.sql";
 
     private final JdbcTemplate jdbc;
-    private final RankingProperties ranking;
 
-    public IssueRepository(JdbcTemplate jdbc, RankingProperties ranking) {
+    public IssueRepository(JdbcTemplate jdbc) {
         this.jdbc = jdbc;
-        this.ranking = ranking;
     }
 
     /** Creates unit_issue_ack if it is missing; never removes data. */
@@ -50,47 +48,48 @@ public class IssueRepository {
                         rs.getObject("computed_at", LocalDateTime.class), rs.getDouble("exposure_days")));
     }
 
-    public List<ScannerCounts> loadScannerCounts() {
+    /**
+     * Work and problem events of one component per unit, in the window and since its newest "marked OK".
+     * Units without any of its events are not in the list (they count as 0).
+     */
+    public List<Counts> loadCounts(ComponentDefinition component) {
+        String work = placeholders(component.work());
+        String problems = placeholders(component.problems());
+        String all = placeholders(component.allSources());
+        List<Object> args = new ArrayList<>();
+        args.addAll(component.work());
+        args.addAll(component.problems());
+        args.addAll(component.work());
+        args.addAll(component.problems());
+        args.addAll(component.allSources());
+        args.add(component.id());
         return jdbc.query("""
                 select us.unit_id,
-                       coalesce(sum(s.notes_read), 0) as reads_window,
-                       coalesce(sum(s.notes_rejected), 0) as rejected_window,
-                       coalesce(sum(case when a.last_ok is null or s.event_date > date(a.last_ok)
-                                         then s.notes_read else 0 end), 0) as reads_since,
-                       coalesce(sum(case when a.last_ok is null or s.event_date > date(a.last_ok)
-                                         then s.notes_rejected else 0 end), 0) as rejected_since
+                       coalesce(sum(case when d.source in (%1$s) then d.event_count else 0 end), 0) as work_window,
+                       coalesce(sum(case when d.source in (%2$s) then d.event_count else 0 end), 0) as problems_window,
+                       coalesce(sum(case when d.source in (%1$s)
+                                          and (a.last_ok is null or d.event_date > date(a.last_ok))
+                                         then d.event_count else 0 end), 0) as work_since,
+                       coalesce(sum(case when d.source in (%2$s)
+                                          and (a.last_ok is null or d.event_date > date(a.last_ok))
+                                         then d.event_count else 0 end), 0) as problems_since
                 from unit_stats us
-                join unit_scanner_daily s on s.unit_id = us.unit_id
-                     and s.event_date >= date(us.window_start) and s.event_date <= date(us.computed_at)
+                join unit_event_daily d on d.unit_id = us.unit_id
+                     and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
+                     and d.source in (%3$s)
                 left join (select unit_id, max(acked_at) as last_ok
-                           from unit_issue_ack where component = 'SCANNER' group by unit_id) a
+                           from unit_issue_ack where component = ? group by unit_id) a
                      on a.unit_id = us.unit_id
                 group by us.unit_id
-                """,
-                (rs, rowNum) -> new ScannerCounts(rs.getLong("unit_id"), rs.getInt("reads_window"),
-                        rs.getInt("rejected_window"), rs.getInt("reads_since"), rs.getInt("rejected_since")));
+                """.formatted(work, problems, all),
+                (rs, rowNum) -> new Counts(rs.getLong("unit_id"), rs.getInt("work_window"),
+                        rs.getInt("problems_window"), rs.getInt("work_since"), rs.getInt("problems_since")),
+                args.toArray());
     }
 
-    public List<RecyclerCounts> loadRecyclerCounts() {
-        List<String> faults = ranking.recycler().faults();
-        String placeholders = faults.stream().map(f -> "?").collect(Collectors.joining(", "));
-        return jdbc.query("""
-                select us.unit_id,
-                       coalesce(sum(d.faults), 0) as faults_window,
-                       coalesce(sum(case when a.last_ok is null or d.event_date > date(a.last_ok)
-                                         then d.faults else 0 end), 0) as faults_since
-                from unit_stats us
-                join unit_fault_daily d on d.unit_id = us.unit_id
-                     and d.event_date >= date(us.window_start) and d.event_date <= date(us.computed_at)
-                     and d.fault in (%s)
-                left join (select unit_id, max(acked_at) as last_ok
-                           from unit_issue_ack where component = 'RECYCLER' group by unit_id) a
-                     on a.unit_id = us.unit_id
-                group by us.unit_id
-                """.formatted(placeholders),
-                (rs, rowNum) -> new RecyclerCounts(rs.getLong("unit_id"), rs.getInt("faults_window"),
-                        rs.getInt("faults_since")),
-                faults.toArray());
+    /** "?, ?, ?" with one placeholder per name; "null" for an empty list (matches nothing, valid SQL). */
+    private static String placeholders(List<String> names) {
+        return names.isEmpty() ? "null" : names.stream().map(n -> "?").collect(Collectors.joining(", "));
     }
 
     /** The newest "marked OK" per unit and component. */
@@ -100,13 +99,13 @@ public class IssueRepository {
                 from unit_issue_ack a
                 join (select max(id) as max_id from unit_issue_ack group by unit_id, component) m on m.max_id = a.id
                 """,
-                (rs, rowNum) -> new LastOk(rs.getLong("unit_id"), IssueComponent.valueOf(rs.getString("component")),
+                (rs, rowNum) -> new LastOk(rs.getLong("unit_id"), rs.getString("component"),
                         rs.getObject("acked_at", LocalDateTime.class), rs.getString("acked_by"), rs.getString("note")));
     }
 
-    public void insertAck(long unitId, IssueComponent component, LocalDateTime at, String by, String note) {
+    public void insertAck(long unitId, String component, LocalDateTime at, String by, String note) {
         jdbc.update("insert into unit_issue_ack (unit_id, component, acked_at, acked_by, note) values (?, ?, ?, ?, ?)",
-                unitId, component.name(), at, by, note);
+                unitId, component, at, by, note);
     }
 
     /** Every "marked OK" of one unit, newest first. */
@@ -119,7 +118,7 @@ public class IssueRepository {
                 from unit_issue_ack where unit_id = ? order by acked_at desc, id desc limit ?
                 """,
                 (rs, rowNum) -> new IssueAck(rs.getLong("id"), rs.getLong("unit_id"),
-                        IssueComponent.valueOf(rs.getString("component")),
+                        rs.getString("component"),
                         rs.getObject("acked_at", LocalDateTime.class), rs.getString("acked_by"), rs.getString("note")),
                 args.toArray());
     }
