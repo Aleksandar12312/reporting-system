@@ -2,6 +2,8 @@
 -- migrate_event_parts.sql): every event gets SCANNER or RECYCLER and the column can no longer be NULL.
 -- Only events without a component (NULL or OTHER) are changed, so it is safe to run again.
 USE mock_lincstation;
+-- MySQL Workbench safe update mode (error 1175) refuses UPDATE without a key column in WHERE; off for this session only
+SET SQL_SAFE_UPDATES = 0;
 
 UPDATE event_source SET part = 'RECYCLER'
 WHERE (part IS NULL OR part = 'OTHER') AND source IN ('ERROR_DURING_PAYOUT', 'INCOMPLETE_PAYOUT', 'INCOMPLETE_FLOAT', 'PAYOUT_OUT_OF_SERVICE', 'TIME_OUT',
@@ -14,6 +16,8 @@ WHERE (part IS NULL OR part = 'OTHER') AND source IN ('ERROR_DURING_PAYOUT', 'IN
 UPDATE event_source SET part = 'SCANNER' WHERE part IS NULL OR part = 'OTHER';
 
 ALTER TABLE event_source MODIFY COLUMN part VARCHAR(20) NOT NULL;
+
+SET SQL_SAFE_UPDATES = 1;
 
 -- Check: how many events per component
 SELECT part, COUNT(*) AS events FROM event_source GROUP BY part;

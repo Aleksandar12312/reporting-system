@@ -10,6 +10,8 @@
 -- on its next start (db/schema_stats.sql); it then fills unit_event_daily from the event table once.
 -- No event and no "marked OK" (unit_issue_ack) is removed.
 USE mock_lincstation;
+-- MySQL Workbench safe update mode (error 1175) refuses UPDATE without a key column in WHERE; off for this session only
+SET SQL_SAFE_UPDATES = 0;
 
 -- 1. The new column; every existing event starts as SCANNER, the default is removed again at the end
 ALTER TABLE event_source ADD COLUMN part VARCHAR(20) NOT NULL DEFAULT 'SCANNER' AFTER description;
@@ -27,6 +29,8 @@ WHERE source IN ('ERROR_DURING_PAYOUT', 'INCOMPLETE_PAYOUT', 'INCOMPLETE_FLOAT',
                  'NOTE_DISPENSED_AT_POWER-UP', 'NOTE_HELD_IN_BEZEL', 'CASHBOX_PAID');
 
 ALTER TABLE event_source ALTER COLUMN part DROP DEFAULT;
+
+SET SQL_SAFE_UPDATES = 1;
 
 -- 3. Check: how many events per component, and every event name with its component
 SELECT part, COUNT(*) AS events FROM event_source GROUP BY part;
