@@ -10,8 +10,6 @@ USE mock_lincstation;
 DROP TABLE IF EXISTS unit_issue_ack;
 DROP TABLE IF EXISTS unit_reset;
 DROP TABLE IF EXISTS unit_event_daily;
-DROP TABLE IF EXISTS unit_scanner_daily;   -- old, replaced by unit_event_daily
-DROP TABLE IF EXISTS unit_fault_daily;     -- old, replaced by unit_event_daily
 DROP TABLE IF EXISTS unit_stats;
 DROP TABLE IF EXISTS model_stats;
 DROP TABLE IF EXISTS stats_etl_state;

@@ -44,24 +44,8 @@ public class StatsRepository {
 
     // ------------------------------------------------------------------ tables
 
-    /**
-     * Creates the tables if they are missing and drops the old unit_fault_daily / unit_scanner_daily
-     * (replaced by unit_event_daily). A model_stats table from the first version of the script
-     * (without mean_rate_per_day) is dropped and created again; it holds only derived numbers.
-     */
+    /** Creates the tables if they are missing; never removes data. */
     public void createTablesIfMissing() {
-        runSchemaScript();
-        Integer meanColumns = jdbc.queryForObject("""
-                select count(*) from information_schema.columns
-                where table_schema = database() and table_name = 'model_stats' and column_name = 'mean_rate_per_day'
-                """, Integer.class);
-        if (meanColumns == null || meanColumns == 0) {
-            jdbc.execute("drop table model_stats");
-            runSchemaScript();
-        }
-    }
-
-    private void runSchemaScript() {
         new ResourceDatabasePopulator(new ClassPathResource(SCHEMA_SCRIPT), new ClassPathResource(USER_TABLES_SCRIPT))
                 .execute(jdbc.getDataSource());
     }

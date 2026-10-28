@@ -19,8 +19,8 @@ import org.springframework.batch.repeat.RepeatStatus;
  *   <li>there is no state row yet: the first run, or the stats tables were emptied by hand</li>
  *   <li>the state points past the newest event, or its check event is gone or different: the event table
  *       was re-created (re-seed)</li>
- *   <li>unit_event_daily is empty although events were already counted: the table is new (first start after
- *       the upgrade from unit_fault_daily / unit_scanner_daily) or was emptied by hand</li>
+ *   <li>unit_event_daily is empty although events were already counted: the table was dropped or emptied
+ *       by hand</li>
  * </ul>
  */
 public class PrepareStatsTasklet implements Tasklet {

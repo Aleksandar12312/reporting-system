@@ -2,16 +2,11 @@
 -- (package com.example.monitor.stats).
 --
 -- The application runs this script itself on every start, so you do not have to.
--- Every CREATE is CREATE TABLE IF NOT EXISTS: running it again never removes data of the current tables
--- (only the two old tables replaced by unit_event_daily are dropped).
+-- Every CREATE is CREATE TABLE IF NOT EXISTS: running it again never removes data.
 -- To run it by hand in Workbench, first make mock_lincstation the default schema (double-click it).
 --
 -- No foreign keys on purpose: these tables hold derived numbers only, and foreign keys would stop
 -- schema.sql from dropping unit/unit_type when the mock data is created again.
-
--- Replaced by unit_event_daily (one table for every kind of event). They held derived numbers only.
-DROP TABLE IF EXISTS unit_fault_daily;
-DROP TABLE IF EXISTS unit_scanner_daily;
 
 -- Events per unit, day (UTC day of event.event_time) and event name (event.source): every event that has a
 -- source is counted, not only the faults. Faults, scanner reads and rejects, payouts ... are all rows here,

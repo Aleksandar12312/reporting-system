@@ -125,9 +125,7 @@ When it runs: once when the app is ready (after the mock seeder), then on `stats
 3. `unitStatsStep`: reader / processor / writer, one `unit_stats` row per unit
 4. `modelStatsStep`: `model_stats` calculated again (one row per model)
 
-The app creates the tables itself (`db/schema_stats.sql`; it also drops the old `unit_fault_daily` and
-`unit_scanner_daily`, which `unit_event_daily` replaced, and then builds the statistics once from the event table)
-and Spring Boot creates the Spring Batch tables (`BATCH_...`).
+The app creates the tables itself (`db/schema_stats.sql`) and Spring Boot creates the Spring Batch tables (`BATCH_...`).
 To force a full rebuild, empty `stats_etl_state` (`DELETE FROM stats_etl_state;`); the next run builds everything again.
 Settings: the `stats:` block of `application-dev.yml`; `stats.enabled: false` switches the whole job off.
 
